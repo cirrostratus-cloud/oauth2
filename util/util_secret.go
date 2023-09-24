@@ -18,7 +18,7 @@ func generatePassword(length int) string {
 	return string(password)
 }
 
-func NewRandonSecret(length int, isSecretUnique func(string) bool) string {
+func NewRandonSecret(length int, isSecretUnique func(string) (bool, error)) string {
 	// Verificar si la contraseña es única (aquí puedes agregar tu lógica para verificar la unicidad)
 	isUnique := false
 	var uniquePassword string
@@ -28,7 +28,7 @@ func NewRandonSecret(length int, isSecretUnique func(string) bool) string {
 		// Si es única, establece isUnique en true y sale del bucle
 		// De lo contrario, genera una nueva contraseña y vuelve a verificar
 		// hasta que se encuentre una contraseña única.
-		isUnique = isSecretUnique(uniquePassword)
+		isUnique, _ = isSecretUnique(uniquePassword)
 	}
 
 	return uniquePassword

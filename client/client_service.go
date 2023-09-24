@@ -1,9 +1,8 @@
 package client
 
 import (
-	"errors"
-
 	util "github.com/cirrostratus-cloud/oauth2/util"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type CreateClientService struct {
@@ -11,45 +10,65 @@ type CreateClientService struct {
 	clientRepostory ClientRepository
 }
 
-func (c CreateClientService) NewClient(isPublic bool, redirectUri string) (Client, error) {
-	clientType := ClientTypeConfidential
-	if isPublic {
-		clientType = ClientTypePublic
+func (c CreateClientService) NewClient(redirectURI string) (Client, error) {
+	secret, err := bcrypt.GenerateFromPassword(util.FromStringToByteArray(util.NewRandonSecret(c.secretLenght, c.isSecretUnique)), bcrypt.DefaultCost)
+	if err != nil {
+		return Client{}, err
 	}
-	// TODO: Check if redirectUri is valid
-	client := NewClient(util.NewUUIDString(), util.NewRandonSecret(c.secretLenght, c.isSecretUnique), clientType, redirectUri) // TODO: Use Bcrypt to hash secret
-	return c.clientRepostory.CreateClient(client)
-}
-
-func (c CreateClientService) isSecretUnique(secret string) bool {
-	client, err := c.clientRepostory.FindClientBySecret(secret)
-	return client.GetSecret() == secret && err == nil // TODO: Use Bcrypt to compare secrets
+	client, err := NewClient(util.NewUUIDString(), util.FromByteArrayToString(secret), redirectURI)
+	if err != nil {
+		return client, err
+	}
+	client, err = c.clientRepostory.CreateClient(client)
+	if err != nil {
+		return client, err
+	}
+	return client, nil
 }
 
 func NewCreateClientService(secretLenght int, clientRepostory ClientRepository) CreateClientUseCase {
 	return CreateClientService{secretLenght, clientRepostory}
 }
 
-type GetClientService struct {
-	clientRepostory ClientRepository
+func (c CreateClientService) isSecretUnique(secret string) (bool, error) {
+	client, err := c.clientRepostory.FindClientBySecret(secret)
+	if err != nil {
+		return false, err
+	}
+	err = bcrypt.CompareHashAndPassword(util.FromStringToByteArray(client.GetSecret()), util.FromStringToByteArray(secret))
+	if err != nil {
+		return false, err
+	}
+	return (client.GetID() != ""), nil
 }
 
-func (c GetClientService) GetClientByID(clientID string) (Client, error) {
-	if clientID == "" {
-		return Client{}, errors.New("Client ID is empty")
-	}
-	return c.clientRepostory.FindClientByID(clientID)
+type GetClientService struct {
+	clientRepostory ClientRepository
 }
 
 func NewGetClientService(clientRepostory ClientRepository) GetClientUseCase {
 	return GetClientService{clientRepostory}
 }
 
+func (c GetClientService) GetClientByID(clientID string) (Client, error) {
+	if clientID == "" {
+		return Client{}, ErrClientIDEmpty
+	}
+	return c.clientRepostory.FindClientByID(clientID)
+}
+
 type DisableClientService struct {
 	clientRepostory ClientRepository
 }
 
+func NewDisableClientService(clientRepostory ClientRepository) DisableClientUseCase {
+	return DisableClientService{clientRepostory}
+}
+
 func (c DisableClientService) DisableClientByID(clientID string) (Client, error) {
+	if clientID == "" {
+		return Client{}, ErrClientIDEmpty
+	}
 	client, err := c.clientRepostory.FindClientByID(clientID)
 	if err != nil {
 		return client, err
@@ -58,15 +77,18 @@ func (c DisableClientService) DisableClientByID(clientID string) (Client, error)
 	return c.clientRepostory.UpdateClient(client)
 }
 
-func NewDisableClientService(clientRepostory ClientRepository) DisableClientUseCase {
-	return DisableClientService{clientRepostory}
-}
-
 type EnableClientService struct {
 	clientRepostory ClientRepository
 }
 
+func NewEnableClientService(clientRepostory ClientRepository) EnableClientUseCase {
+	return EnableClientService{clientRepostory}
+}
+
 func (c EnableClientService) EnableClientByID(clientID string) (Client, error) {
+	if clientID == "" {
+		return Client{}, ErrClientIDEmpty
+	}
 	client, err := c.clientRepostory.FindClientByID(clientID)
 	if err != nil {
 		return client, err
@@ -75,25 +97,31 @@ func (c EnableClientService) EnableClientByID(clientID string) (Client, error) {
 	return c.clientRepostory.UpdateClient(client)
 }
 
-func NewEnableClientService(clientRepostory ClientRepository) EnableClientUseCase {
-	return EnableClientService{clientRepostory}
-}
-
 type AuthenticateClientService struct {
 	clientRepostory ClientRepository
 }
 
+func NewAuthenticateClientService(clientRepostory ClientRepository) AuthenticateClientUseCase {
+	return AuthenticateClientService{clientRepostory}
+}
+
 func (c AuthenticateClientService) AuthenticateClient(clientAuthentication ClientAuthentication) (Client, error) {
+	if clientAuthentication.ClientID == "" {
+		return Client{}, ErrClientIDEmpty
+	}
+	if clientAuthentication.ClientSecret == "" {
+		return Client{}, ErrClientSecretEmpty
+	}
 	client, err := c.clientRepostory.FindClientByID(clientAuthentication.ClientID)
 	if err != nil {
 		return client, err
 	}
-	if client.GetSecret() != clientAuthentication.ClientSecret { // TODO: Use Bcrypt to compare secrets
-		return client, errors.New("Client authentication failed")
+	if !client.IsEnabled() {
+		return client, ErrClientDisabled
+	}
+	err = bcrypt.CompareHashAndPassword(util.FromStringToByteArray(client.GetSecret()), util.FromStringToByteArray(clientAuthentication.ClientSecret))
+	if err != nil {
+		return client, err
 	}
 	return client, nil
-}
-
-func NewAuthenticateClientService(clientRepostory ClientRepository) AuthenticateClientUseCase {
-	return AuthenticateClientService{clientRepostory}
 }

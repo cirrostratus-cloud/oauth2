@@ -1,7 +1,7 @@
 package client
 
 type CreateClientUseCase interface {
-	NewClient(isPublic bool, redirectUri string) (Client, error)
+	NewClient(redirectURI string) (Client, error)
 }
 
 type GetClientUseCase interface {
