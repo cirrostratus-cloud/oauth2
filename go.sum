@@ -1,2 +1,6 @@
+github.com/cirrostratus-cloud/common v0.1.0 h1:oOgkgxpG+Xg419olIvSM52aMWyzwH6zSMzuu6KFVNJc=
+github.com/cirrostratus-cloud/common v0.1.0/go.mod h1:FR5qqqJbjFEz7zSLLbmoGQn0HHJ5EomtCOWIisyjnlw=
+github.com/cirrostratus-cloud/common v0.1.1 h1:I29J/W/pzASxgokdRLXf43Dj8XjB6jU6F1utCdigM0c=
+github.com/cirrostratus-cloud/common v0.1.1/go.mod h1:FR5qqqJbjFEz7zSLLbmoGQn0HHJ5EomtCOWIisyjnlw=
 golang.org/x/crypto v0.13.0 h1:mvySKfSWJ+UKUii46M40LOvyWfN0s2U+46/jDd0e6Ck=
 golang.org/x/crypto v0.13.0/go.mod h1:y6Z2r+Rw4iayiXXAIxJIDAJ1zMW4yaTpebo8fPOliYc=

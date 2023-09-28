@@ -5,18 +5,18 @@ import (
 	"net/url"
 )
 
-var ErrInvalidRedirectURI error = errors.New("invalid redirect URI")
+var ErrInvalidURI error = errors.New("invalid URI")
 
 func ValidateHTTPURL(rawURL string) error {
 	parsedURL, err := url.Parse(rawURL)
 
 	if err != nil {
-		return ErrInvalidRedirectURI
+		return ErrInvalidURI
 	}
 
 	if parsedURL.Scheme == "http" || parsedURL.Scheme == "https" {
 		return nil
 	} else {
-		return ErrInvalidRedirectURI
+		return ErrInvalidURI
 	}
 }

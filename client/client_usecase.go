@@ -19,3 +19,11 @@ type EnableClientUseCase interface {
 type AuthenticateClientUseCase interface {
 	AuthenticateClient(clientAuthentication ClientAuthentication) (Client, error)
 }
+
+type CreateClientAccessTokenUseCase interface {
+	NewClientAccessToken(clientID string, accessTokenID string) (ClientAccessToken, error)
+}
+
+type CreateClientRefreshTokenUseCase interface {
+	NewClientRefreshToken(clientID string, refreshTokenID string) (ClientRefreshToken, error)
+}
