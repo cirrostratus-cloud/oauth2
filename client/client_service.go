@@ -8,8 +8,9 @@ import (
 )
 
 type CreateClientService struct {
-	secretLenght    int
-	clientRepostory ClientRepository
+	secretLenght           int
+	clientRepostory        ClientRepository
+	clientCreatedPublisher ClientCreatedPublisher
 }
 
 func (c CreateClientService) NewClient(createClient CreateClient) (Client, error) {
@@ -28,11 +29,22 @@ func (c CreateClientService) NewClient(createClient CreateClient) (Client, error
 	if err != nil {
 		return client, err
 	}
+	err = c.clientCreatedPublisher.ClientCreated(ClientCreatedEvent{
+		ClientID: client.GetID(),
+	})
+	if err != nil {
+		err = c.clientRepostory.DeleteClientByID(client.GetID())
+		return Client{}, err
+	}
 	return client, nil
 }
 
-func NewCreateClientService(secretLenght int, clientRepostory ClientRepository) CreateClientUseCase {
-	return CreateClientService{secretLenght, clientRepostory}
+func NewCreateClientService(secretLenght int, clientRepostory ClientRepository, clientCreatedPublisher ClientCreatedPublisher) CreateClientUseCase {
+	return CreateClientService{
+		secretLenght:           secretLenght,
+		clientRepostory:        clientRepostory,
+		clientCreatedPublisher: clientCreatedPublisher,
+	}
 }
 
 func (c CreateClientService) isSecretUnique(secret string) (bool, error) {
@@ -65,11 +77,14 @@ func (c GetClientService) GetClientByID(clientByID ClientByID) (Client, error) {
 }
 
 type DisableClientService struct {
-	clientRepostory ClientRepository
+	clientRepostory         ClientRepository
+	clientDisabledPublisher ClientDisabledPublisher
 }
 
-func NewDisableClientService(clientRepostory ClientRepository) DisableClientUseCase {
-	return DisableClientService{clientRepostory}
+func NewDisableClientService(clientRepostory ClientRepository, clientDisabledPublisher ClientDisabledPublisher) DisableClientUseCase {
+	return DisableClientService{
+		clientRepostory,
+		clientDisabledPublisher}
 }
 
 func (c DisableClientService) DisableClientByID(clientByID ClientByID) (Client, error) {
@@ -82,15 +97,25 @@ func (c DisableClientService) DisableClientByID(clientByID ClientByID) (Client, 
 		return client, err
 	}
 	client.DisableClient()
-	return c.clientRepostory.UpdateClient(client)
+	client, err = c.clientRepostory.UpdateClient(client)
+	if err != nil {
+		client.EnableClient()
+		client, err = c.clientRepostory.UpdateClient(client)
+		return client, err
+	}
+	return client, nil
 }
 
 type EnableClientService struct {
-	clientRepostory ClientRepository
+	clientRepostory       ClientRepository
+	clientEnablePublisher ClientEnabledPublisher
 }
 
-func NewEnableClientService(clientRepostory ClientRepository) EnableClientUseCase {
-	return EnableClientService{clientRepostory}
+func NewEnableClientService(clientRepostory ClientRepository, clientEnablePublisher ClientEnabledPublisher) EnableClientUseCase {
+	return EnableClientService{
+		clientRepostory:       clientRepostory,
+		clientEnablePublisher: clientEnablePublisher,
+	}
 }
 
 func (c EnableClientService) EnableClientByID(clientByID ClientByID) (Client, error) {
@@ -103,7 +128,13 @@ func (c EnableClientService) EnableClientByID(clientByID ClientByID) (Client, er
 		return client, err
 	}
 	client.EnableClient()
-	return c.clientRepostory.UpdateClient(client)
+	client, err = c.clientRepostory.UpdateClient(client)
+	if err != nil {
+		client.DisableClient()
+		client, err = c.clientRepostory.UpdateClient(client)
+		return client, err
+	}
+	return client, nil
 }
 
 type AuthenticateClientService struct {

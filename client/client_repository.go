@@ -5,4 +5,5 @@ type ClientRepository interface {
 	FindClientBySecret(clientSecret string) (Client, error)
 	CreateClient(client Client) (Client, error)
 	UpdateClient(client Client) (Client, error)
+	DeleteClientByID(clientID string) error
 }
