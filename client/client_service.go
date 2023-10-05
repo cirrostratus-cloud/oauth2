@@ -3,6 +3,7 @@ package client
 import (
 	"github.com/cirrostratus-cloud/common/uuid"
 	util "github.com/cirrostratus-cloud/oauth2/util"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -11,13 +12,15 @@ type CreateClientService struct {
 	clientRepostory ClientRepository
 }
 
-func (c CreateClientService) NewClient(redirectURI string) (Client, error) {
-	// FIXME: Add logs
+func (c CreateClientService) NewClient(createClient CreateClient) (Client, error) {
+	log.WithFields(log.Fields{
+		"redirectURIs": createClient.RedirectURIs,
+	}).Info("Creating new client")
 	secret, err := bcrypt.GenerateFromPassword(util.FromStringToByteArray(util.NewRandonSecret(c.secretLenght, c.isSecretUnique)), bcrypt.DefaultCost)
 	if err != nil {
 		return Client{}, err
 	}
-	client, err := NewClient(uuid.NewV4(), util.FromByteArrayToString(secret), redirectURI)
+	client, err := NewClient(uuid.NewV4(), util.FromByteArrayToString(secret), createClient.RedirectURIs)
 	if err != nil {
 		return client, err
 	}
@@ -53,12 +56,12 @@ func NewGetClientService(clientRepostory ClientRepository) GetClientUseCase {
 	return GetClientService{clientRepostory}
 }
 
-func (c GetClientService) GetClientByID(clientID string) (Client, error) {
+func (c GetClientService) GetClientByID(clientByID ClientByID) (Client, error) {
 	// FIXME: Add logs
-	if clientID == "" {
+	if clientByID.ClientID == "" {
 		return Client{}, ErrClientIDEmpty
 	}
-	return c.clientRepostory.FindClientByID(clientID)
+	return c.clientRepostory.FindClientByID(clientByID.ClientID)
 }
 
 type DisableClientService struct {
@@ -69,12 +72,12 @@ func NewDisableClientService(clientRepostory ClientRepository) DisableClientUseC
 	return DisableClientService{clientRepostory}
 }
 
-func (c DisableClientService) DisableClientByID(clientID string) (Client, error) {
+func (c DisableClientService) DisableClientByID(clientByID ClientByID) (Client, error) {
 	// FIXME: Add logs
-	if clientID == "" {
+	if clientByID.ClientID == "" {
 		return Client{}, ErrClientIDEmpty
 	}
-	client, err := c.clientRepostory.FindClientByID(clientID)
+	client, err := c.clientRepostory.FindClientByID(clientByID.ClientID)
 	if err != nil {
 		return client, err
 	}
@@ -90,12 +93,12 @@ func NewEnableClientService(clientRepostory ClientRepository) EnableClientUseCas
 	return EnableClientService{clientRepostory}
 }
 
-func (c EnableClientService) EnableClientByID(clientID string) (Client, error) {
+func (c EnableClientService) EnableClientByID(clientByID ClientByID) (Client, error) {
 	// FIXME: Add logs
-	if clientID == "" {
+	if clientByID.ClientID == "" {
 		return Client{}, ErrClientIDEmpty
 	}
-	client, err := c.clientRepostory.FindClientByID(clientID)
+	client, err := c.clientRepostory.FindClientByID(clientByID.ClientID)
 	if err != nil {
 		return client, err
 	}
@@ -131,46 +134,4 @@ func (c AuthenticateClientService) AuthenticateClient(clientAuthentication Clien
 		return client, err
 	}
 	return client, nil
-}
-
-type CreateClientAccessTokenService struct {
-	clientRepostory ClientRepository
-}
-
-func NewCreateClientAccessTokenService(clientRepostory ClientRepository) CreateClientAccessTokenUseCase {
-	return CreateClientAccessTokenService{clientRepostory}
-}
-
-func (c CreateClientAccessTokenService) NewClientAccessToken(clientID string, accessTokenID string) (ClientAccessToken, error) {
-	client, err := c.clientRepostory.FindClientByID(clientID)
-	if err != nil {
-		return ClientAccessToken{}, err
-	}
-	clientAccessToken := client.AddClientAccessToken(uuid.NewV4(), accessTokenID)
-	client, err = c.clientRepostory.UpdateClient(client)
-	if err != nil {
-		return ClientAccessToken{}, err
-	}
-	return clientAccessToken, nil
-}
-
-type CreateClientRefreshTokenService struct {
-	clientRepostory ClientRepository
-}
-
-func NewCreateClientRefreshTokenService(clientRepostory ClientRepository) CreateClientRefreshTokenUseCase {
-	return CreateClientRefreshTokenService{clientRepostory}
-}
-
-func (c CreateClientRefreshTokenService) NewClientRefreshToken(clientID string, refreshTokenID string) (ClientRefreshToken, error) {
-	client, err := c.clientRepostory.FindClientByID(clientID)
-	if err != nil {
-		return ClientRefreshToken{}, err
-	}
-	clientRefreshToken := client.AddClientRefreshToken(uuid.NewV4(), refreshTokenID)
-	client, err = c.clientRepostory.UpdateClient(client)
-	if err != nil {
-		return ClientRefreshToken{}, err
-	}
-	return clientRefreshToken, nil
 }
