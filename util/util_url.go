@@ -14,7 +14,7 @@ func ValidateHTTPURL(rawURL string) error {
 		return ErrInvalidURI
 	}
 
-	if parsedURL.Scheme == "http" || parsedURL.Scheme == "https" {
+	if (parsedURL.Scheme == "http" && parsedURL.Host == "localhost") || parsedURL.Scheme == "https" {
 		return nil
 	} else {
 		return ErrInvalidURI
