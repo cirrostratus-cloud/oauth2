@@ -29,10 +29,16 @@ func (c CreateClientService) NewClient(createClient CreateClient) (Client, error
 	if err != nil {
 		return client, err
 	}
+	log.WithFields(log.Fields{
+		"clientID": client.GetID(),
+	}).Info("Client created")
 	err = c.clientCreatedPublisher.ClientCreated(ClientCreatedEvent{
 		ClientID: client.GetID(),
 	})
 	if err != nil {
+		log.WithFields(log.Fields{
+			"clientID": client.GetID(),
+		}).Error("Error publishing client created event")
 		err = c.clientRepostory.DeleteClientByID(client.GetID())
 		return Client{}, err
 	}
@@ -48,16 +54,19 @@ func NewCreateClientService(secretLenght int, clientRepostory ClientRepository, 
 }
 
 func (c CreateClientService) isSecretUnique(secret string) (bool, error) {
-	// FIXME: Add logs
 	client, err := c.clientRepostory.FindClientBySecret(secret)
 	if err != nil {
 		return false, err
+	}
+	if client.GetID() != "" {
+		log.Warn("Client secret already exists")
+		return false, nil
 	}
 	err = bcrypt.CompareHashAndPassword(util.FromStringToByteArray(client.GetSecret()), util.FromStringToByteArray(secret))
 	if err != nil {
 		return false, err
 	}
-	return (client.GetID() != ""), nil
+	return true, nil
 }
 
 type GetClientService struct {
@@ -69,8 +78,14 @@ func NewGetClientService(clientRepostory ClientRepository) GetClientUseCase {
 }
 
 func (c GetClientService) GetClientByID(clientByID ClientByID) (Client, error) {
-	// FIXME: Add logs
+	log.WithFields(log.Fields{
+		"clientID": clientByID.ClientID,
+	}).Info("Getting client by ID")
+
 	if clientByID.ClientID == "" {
+		log.WithFields(log.Fields{
+			"clientID": clientByID.ClientID,
+		}).Warn("Client ID is empty")
 		return Client{}, ErrClientIDEmpty
 	}
 	return c.clientRepostory.FindClientByID(clientByID.ClientID)
@@ -88,8 +103,13 @@ func NewDisableClientService(clientRepostory ClientRepository, clientDisabledPub
 }
 
 func (c DisableClientService) DisableClientByID(clientByID ClientByID) (Client, error) {
-	// FIXME: Add logs
+	log.WithFields(log.Fields{
+		"clientID": clientByID.ClientID,
+	}).Info("Disabling client by ID")
 	if clientByID.ClientID == "" {
+		log.WithFields(log.Fields{
+			"clientID": clientByID.ClientID,
+		}).Warn("Client ID is empty")
 		return Client{}, ErrClientIDEmpty
 	}
 	client, err := c.clientRepostory.FindClientByID(clientByID.ClientID)
@@ -99,6 +119,9 @@ func (c DisableClientService) DisableClientByID(clientByID ClientByID) (Client, 
 	client.DisableClient()
 	client, err = c.clientRepostory.UpdateClient(client)
 	if err != nil {
+		log.WithFields(log.Fields{
+			"clientID": clientByID.ClientID,
+		}).Error("Error disabling client")
 		client.EnableClient()
 		client, err = c.clientRepostory.UpdateClient(client)
 		return client, err
@@ -119,8 +142,13 @@ func NewEnableClientService(clientRepostory ClientRepository, clientEnablePublis
 }
 
 func (c EnableClientService) EnableClientByID(clientByID ClientByID) (Client, error) {
-	// FIXME: Add logs
+	log.WithFields(log.Fields{
+		"clientID": clientByID.ClientID,
+	}).Info("Enabling client by ID")
 	if clientByID.ClientID == "" {
+		log.WithFields(log.Fields{
+			"clientID": clientByID.ClientID,
+		}).Warn("Client ID is empty")
 		return Client{}, ErrClientIDEmpty
 	}
 	client, err := c.clientRepostory.FindClientByID(clientByID.ClientID)
@@ -130,6 +158,9 @@ func (c EnableClientService) EnableClientByID(clientByID ClientByID) (Client, er
 	client.EnableClient()
 	client, err = c.clientRepostory.UpdateClient(client)
 	if err != nil {
+		log.WithFields(log.Fields{
+			"clientID": clientByID.ClientID,
+		}).Error("Error enabling client")
 		client.DisableClient()
 		client, err = c.clientRepostory.UpdateClient(client)
 		return client, err
@@ -146,11 +177,20 @@ func NewAuthenticateClientService(clientRepostory ClientRepository) Authenticate
 }
 
 func (c AuthenticateClientService) AuthenticateClient(clientAuthentication ClientAuthentication) (Client, error) {
-	// FIXME: Add logs
+	log.WithFields(log.Fields{
+		"clientID": clientAuthentication.ClientID,
+	}).Info("Authenticating client")
+
 	if clientAuthentication.ClientID == "" {
+		log.WithFields(log.Fields{
+			"clientID": clientAuthentication.ClientID,
+		}).Warn("Client ID is empty")
 		return Client{}, ErrClientIDEmpty
 	}
 	if clientAuthentication.ClientSecret == "" {
+		log.WithFields(log.Fields{
+			"clientID": clientAuthentication.ClientID,
+		}).Warn("Client secret is empty")
 		return Client{}, ErrClientSecretEmpty
 	}
 	client, err := c.clientRepostory.FindClientByID(clientAuthentication.ClientID)
@@ -158,6 +198,9 @@ func (c AuthenticateClientService) AuthenticateClient(clientAuthentication Clien
 		return client, err
 	}
 	if !client.IsEnabled() {
+		log.WithFields(log.Fields{
+			"clientID": clientAuthentication.ClientID,
+		}).Warn("Client is disabled")
 		return client, ErrClientDisabled
 	}
 	err = bcrypt.CompareHashAndPassword(util.FromStringToByteArray(client.GetSecret()), util.FromStringToByteArray(clientAuthentication.ClientSecret))
