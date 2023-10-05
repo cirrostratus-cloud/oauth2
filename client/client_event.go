@@ -4,10 +4,6 @@ type ClientCreatedEvent struct {
 	ClientID string
 }
 
-type ClientDeletedEvent struct {
-	ClientID string
-}
-
 type ClientDisabledEvent struct {
 	ClientID string
 }
@@ -18,10 +14,6 @@ type ClientEnabledEvent struct {
 
 type ClientCreatedPublisher interface {
 	ClientCreated(event ClientCreatedEvent) error
-}
-
-type ClientDeletedPublisher interface {
-	ClientDeleted(event ClientDeletedEvent) error
 }
 
 type ClientDisabledPublisher interface {
