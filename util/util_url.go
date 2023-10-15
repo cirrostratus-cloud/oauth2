@@ -11,10 +11,10 @@ func ValidateHTTPURL(rawURL string) error {
 	parsedURL, err := url.Parse(rawURL)
 
 	if err != nil {
-		return ErrInvalidURI
+		return err
 	}
 
-	if (parsedURL.Scheme == "http" && parsedURL.Host == "localhost") || parsedURL.Scheme == "https" {
+	if (parsedURL.Scheme == "http" && parsedURL.Hostname() == "localhost") || parsedURL.Scheme == "https" {
 		return nil
 	} else {
 		return ErrInvalidURI
