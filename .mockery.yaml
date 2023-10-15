@@ -1,0 +1,8 @@
+with-expecter: true
+packages:
+  github.com/cirrostratus-cloud/oauth2/client:
+    interfaces:
+      ClientRepository:
+  github.com/cirrostratus-cloud/common/event:
+    interfaces:
+      EventBus:

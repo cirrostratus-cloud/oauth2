@@ -3,9 +3,9 @@ package client
 import "github.com/cirrostratus-cloud/common/event"
 
 const (
-	ClientCreatedEventName  = "client/created"
-	ClientDisabledEventName = "client/disabled"
-	ClientEnabledEventName  = "client/enabled"
+	ClientCreatedEventName  event.EventName = "client/created"
+	ClientDisabledEventName event.EventName = "client/disabled"
+	ClientEnabledEventName  event.EventName = "client/enabled"
 )
 
 type ClientCreatedEvent struct {
