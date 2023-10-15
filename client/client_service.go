@@ -123,6 +123,17 @@ func (c DisableClientService) DisableClientByID(clientByID ClientByID) (Client, 
 		client, err = c.clientRepostory.UpdateClient(client)
 		return client, err
 	}
+	err = c.clientDisabledPublisher.ClientDisabled(ClientDisabledEvent{
+		ClientID: client.GetID(),
+	})
+	if err != nil {
+		log.WithFields(log.Fields{
+			"clientID": clientByID.ClientID,
+		}).Error("Error publishing client disabled event")
+		client.EnableClient()
+		client, err = c.clientRepostory.UpdateClient(client)
+		return client, err
+	}
 	return client, nil
 }
 
@@ -158,6 +169,17 @@ func (c EnableClientService) EnableClientByID(clientByID ClientByID) (Client, er
 		log.WithFields(log.Fields{
 			"clientID": clientByID.ClientID,
 		}).Error("Error enabling client")
+		client.DisableClient()
+		client, err = c.clientRepostory.UpdateClient(client)
+		return client, err
+	}
+	err = c.clientEnablePublisher.ClientEnabled(ClientEnabledEvent{
+		ClientID: client.GetID(),
+	})
+	if err != nil {
+		log.WithFields(log.Fields{
+			"clientID": clientByID.ClientID,
+		}).Error("Error publishing client enabled event")
 		client.DisableClient()
 		client, err = c.clientRepostory.UpdateClient(client)
 		return client, err
