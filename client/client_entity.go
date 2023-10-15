@@ -4,10 +4,12 @@ import (
 	"errors"
 
 	"github.com/cirrostratus-cloud/oauth2/util"
+	log "github.com/sirupsen/logrus"
 )
 
 var ErrClientAccessTokenNotFound = errors.New("client access token not found")
 var ErrClientRefreshTokenNotFound = errors.New("client refresh token not found")
+var ErrRedirectURISEmpty = errors.New("redirect URIs is empty")
 
 type Client struct {
 	id           string
@@ -55,6 +57,13 @@ func NewClient(clientID string, secret string, redirectURIs []string) (Client, e
 	}
 	if secret == "" {
 		return Client{}, ErrClientSecretEmpty
+	}
+
+	if len(redirectURIs) == 0 {
+		log.WithFields(log.Fields{
+			"redirectURIs": redirectURIs,
+		}).Warn("Redirect URIs is empty")
+		return Client{}, ErrRedirectURISEmpty
 	}
 
 	for _, redirectURI := range redirectURIs {
