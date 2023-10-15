@@ -1,8 +1,8 @@
 package client
 
 import (
-	"github.com/cirrostratus-cloud/common/uuid"
 	util "github.com/cirrostratus-cloud/oauth2/util"
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -17,11 +17,12 @@ func (c CreateClientService) NewClient(createClient CreateClient) (Client, error
 	log.WithFields(log.Fields{
 		"redirectURIs": createClient.RedirectURIs,
 	}).Info("Creating new client")
+
 	secret, err := bcrypt.GenerateFromPassword(util.FromStringToByteArray(util.NewRandonSecret(c.secretLenght, c.isSecretUnique)), bcrypt.DefaultCost)
 	if err != nil {
 		return Client{}, err
 	}
-	client, err := NewClient(uuid.NewV4(), util.FromByteArrayToString(secret), createClient.RedirectURIs)
+	client, err := NewClient(uuid.NewString(), util.FromByteArrayToString(secret), createClient.RedirectURIs)
 	if err != nil {
 		return client, err
 	}
@@ -54,17 +55,13 @@ func NewCreateClientService(secretLenght int, clientRepostory ClientRepository, 
 }
 
 func (c CreateClientService) isSecretUnique(secret string) (bool, error) {
-	client, err := c.clientRepostory.FindClientBySecret(secret)
+	client, err := c.clientRepostory.FindClientByHashedSecret(secret)
 	if err != nil {
 		return false, err
 	}
 	if client.GetID() != "" {
 		log.Warn("Client secret already exists")
 		return false, nil
-	}
-	err = bcrypt.CompareHashAndPassword(util.FromStringToByteArray(client.GetSecret()), util.FromStringToByteArray(secret))
-	if err != nil {
-		return false, err
 	}
 	return true, nil
 }
