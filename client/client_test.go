@@ -10,6 +10,7 @@ import (
 	"github.com/cirrostratus-cloud/oauth2/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestCreateClientOk(t *testing.T) {
@@ -209,4 +210,154 @@ func TestCreateClientEnableEmptyID(t *testing.T) {
 	assert.Equal(client.ErrClientIDEmpty, err)
 }
 
+func TestAuthenticateClientOk(t *testing.T) {
+	assert := assert.New(t)
+	clientRepostory := mclient.NewMockClientRepository(t)
+	clientSecret := "clientSecret"
+	clientID := "clientID"
+	hashedSecret, err := bcrypt.GenerateFromPassword(util.FromStringToByteArray(clientSecret), bcrypt.DefaultCost)
+	assert.NoError(err)
+	c, err := client.NewClient(clientID, util.FromByteArrayToString(hashedSecret), []string{"http://localhost:8080"})
+	assert.NoError(err)
+	clientRepostory.
+		EXPECT().
+		FindClientByID(clientID).
+		Return(c, nil).
+		Times(1)
+	authenticateClientService := client.NewAuthenticateClientService(clientRepostory)
+	_, err = authenticateClientService.AuthenticateClient(client.ClientAuthentication{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+	})
+	assert.NoError(err)
+}
 
+func TestAuthenticateClientEmptyID(t *testing.T) {
+	assert := assert.New(t)
+	clientRepostory := mclient.NewMockClientRepository(t)
+	authenticateClientService := client.NewAuthenticateClientService(clientRepostory)
+	_, err := authenticateClientService.AuthenticateClient(client.ClientAuthentication{
+		ClientID:     "",
+		ClientSecret: "clientSecret",
+	})
+	assert.Error(err)
+	assert.Equal(client.ErrClientIDEmpty, err)
+}
+
+func TestAuthenticateClientEmptySecret(t *testing.T) {
+	assert := assert.New(t)
+	clientRepostory := mclient.NewMockClientRepository(t)
+	authenticateClientService := client.NewAuthenticateClientService(clientRepostory)
+	_, err := authenticateClientService.AuthenticateClient(client.ClientAuthentication{
+		ClientID:     "clientID",
+		ClientSecret: "",
+	})
+	assert.Error(err)
+	assert.Equal(client.ErrClientSecretEmpty, err)
+}
+
+func TestAuthenticateClientNotFound(t *testing.T) {
+	clientNotFound := errors.New("client not found")
+	assert := assert.New(t)
+	clientRepostory := mclient.NewMockClientRepository(t)
+	clientRepostory.
+		EXPECT().
+		FindClientByID("clientID").
+		Return(client.Client{}, clientNotFound).
+		Times(1)
+	authenticateClientService := client.NewAuthenticateClientService(clientRepostory)
+	_, err := authenticateClientService.AuthenticateClient(client.ClientAuthentication{
+		ClientID:     "clientID",
+		ClientSecret: "clientSecret",
+	})
+	assert.Error(err)
+	assert.Equal(clientNotFound, err)
+}
+
+func TestAuthenticateClientDisabled(t *testing.T) {
+	assert := assert.New(t)
+	clientRepostory := mclient.NewMockClientRepository(t)
+	c, err := client.NewClient("clientID", "clientSecret", []string{"http://localhost:8080"})
+	assert.NoError(err)
+	c.DisableClient()
+	clientRepostory.
+		EXPECT().
+		FindClientByID("clientID").
+		Return(c, nil).
+		Times(1)
+	authenticateClientService := client.NewAuthenticateClientService(clientRepostory)
+	_, err = authenticateClientService.AuthenticateClient(client.ClientAuthentication{
+		ClientID:     "clientID",
+		ClientSecret: "clientSecret",
+	})
+	assert.Error(err)
+	assert.Equal(client.ErrClientDisabled, err)
+}
+
+func TestAuthenticateClientInvalidSecret(t *testing.T) {
+	assert := assert.New(t)
+	clientRepostory := mclient.NewMockClientRepository(t)
+	clientSecret := "clientSecret"
+	clientID := "clientID"
+	hashedSecret, err := bcrypt.GenerateFromPassword(util.FromStringToByteArray(clientSecret), bcrypt.DefaultCost)
+	assert.NoError(err)
+	c, err := client.NewClient(clientID, util.FromByteArrayToString(hashedSecret), []string{"http://localhost:8080"})
+	assert.NoError(err)
+	clientRepostory.
+		EXPECT().
+		FindClientByID(clientID).
+		Return(c, nil).
+		Times(1)
+	authenticateClientService := client.NewAuthenticateClientService(clientRepostory)
+	_, err = authenticateClientService.AuthenticateClient(client.ClientAuthentication{
+		ClientID:     clientID,
+		ClientSecret: "invalidSecret",
+	})
+	assert.Error(err)
+}
+
+func TestGetClientByIDOk(t *testing.T) {
+	assert := assert.New(t)
+	clientRepostory := mclient.NewMockClientRepository(t)
+	clientID := "clientID"
+	c, err := client.NewClient(clientID, "clientSecret", []string{"http://localhost:8080"})
+	assert.NoError(err)
+	clientRepostory.
+		EXPECT().
+		FindClientByID(clientID).
+		Return(c, nil).
+		Times(1)
+	getClientService := client.NewGetClientService(clientRepostory)
+	_, err = getClientService.GetClientByID(client.ClientByID{
+		ClientID: clientID,
+	})
+	assert.NoError(err)
+}
+
+func TestGetClientByIDEmptyID(t *testing.T) {
+	assert := assert.New(t)
+	clientRepostory := mclient.NewMockClientRepository(t)
+	getClientService := client.NewGetClientService(clientRepostory)
+	_, err := getClientService.GetClientByID(client.ClientByID{
+		ClientID: "",
+	})
+	assert.Error(err)
+	assert.Equal(client.ErrClientIDEmpty, err)
+}
+
+func TestGetClientByIDNotFound(t *testing.T) {
+	clientNotFound := errors.New("client not found")
+	assert := assert.New(t)
+	clientRepostory := mclient.NewMockClientRepository(t)
+	clientRepostory.
+		EXPECT().
+		FindClientByID("clientID").
+		Return(client.Client{}, clientNotFound).
+		Times(1)
+	getClientService := client.NewGetClientService(clientRepostory)
+	_, err := getClientService.GetClientByID(client.ClientByID{
+		ClientID: "clientID",
+	})
+	assert.Error(err)
+	assert.Equal(clientNotFound, err)
+}
