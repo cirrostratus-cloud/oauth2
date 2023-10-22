@@ -1,21 +1,25 @@
 package client
 
 type CreateClientUseCase interface {
-	NewClient(CreateClient) (Client, error)
+	NewClient(CreateClient) (CreateClientResult, error)
 }
 
 type GetClientUseCase interface {
-	GetClientByID(ClientByID) (Client, error)
+	GetClientByID(ClientByID) (GetClientResult, error)
 }
 
 type DisableClientUseCase interface {
-	DisableClientByID(ClientByID) (Client, error)
+	DisableClientByID(ClientByID) (DisabledClientResult, error)
 }
 
 type EnableClientUseCase interface {
-	EnableClientByID(ClientByID) (Client, error)
+	EnableClientByID(ClientByID) (EnabledClientResult, error)
 }
 
 type AuthenticateClientUseCase interface {
-	AuthenticateClient(clientAuthentication ClientAuthentication) (Client, error)
+	AuthenticateClient(clientAuthentication ClientAuthentication) (AuthenticatedClientResult, error)
+}
+
+type UpdateRedirectURIsUseCase interface {
+	UpdateRedirectURIs(updateRedirectURIs UpdateRedirectURIs) (Client, error)
 }

@@ -42,6 +42,10 @@ func (c Client) GetRedirectURIs() []string {
 	return c.redirectURIs
 }
 
+func (c *Client) UpdateRedirectURIs(redirectURIs []string) {
+	c.redirectURIs = redirectURIs
+}
+
 func (c Client) ExistsRedirectURI(redirectURI string) bool {
 	for _, uri := range c.redirectURIs {
 		if uri == redirectURI {

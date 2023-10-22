@@ -35,14 +35,14 @@ func TestCreateClientOk(t *testing.T) {
 		Times(1)
 	clientCreatedPublisher := client.NewClientCreatedPublisher(eventBus)
 	createClientService := client.NewCreateClientService(10, clientRepostory, clientCreatedPublisher)
-	createdClient, err := createClientService.NewClient(client.CreateClient{
+	createdResult, err := createClientService.NewClient(client.CreateClient{
 		RedirectURIs: []string{"http://localhost:8080"},
 	})
 	assert.NoError(err)
-	assert.NotEmpty(createdClient.GetID())
-	assert.NotEmpty(createdClient.GetSecret())
-	assert.NotNil(createdClient.GetRedirectURIs())
-	assert.True(createdClient.IsEnabled())
+	assert.NotEmpty(createdResult.ClientID)
+	assert.NotEmpty(createdResult.ClientSecret)
+	assert.NotNil(createdResult.RedirectURIs)
+	assert.True(createdResult.Enabled)
 }
 
 func TestCreateClientInvalidURI(t *testing.T) {
@@ -79,7 +79,7 @@ func TestCreateClientNoRedirectURIs(t *testing.T) {
 	assert.Equal(client.ErrRedirectURISEmpty, err)
 }
 
-func TestCreateClientDisableOk(t *testing.T) {
+func TestClientDisableOk(t *testing.T) {
 	assert := assert.New(t)
 	clientRepostory := mclient.NewMockClientRepository(t)
 	c, err := client.NewClient("clientID", "clientSecret", []string{"http://localhost:8080"})
@@ -109,10 +109,11 @@ func TestCreateClientDisableOk(t *testing.T) {
 		ClientID: "clientID",
 	})
 	assert.NoError(err)
-	assert.False(createdClient.IsEnabled())
+	assert.False(createdClient.Enabled)
+	assert.Equal("clientID", createdClient.ClientID)
 }
 
-func TestCreateClientDisableNotFound(t *testing.T) {
+func TestClientDisableNotFound(t *testing.T) {
 	clientNotFound := errors.New("client not found")
 	assert := assert.New(t)
 	clientRepostory := mclient.NewMockClientRepository(t)
@@ -131,7 +132,7 @@ func TestCreateClientDisableNotFound(t *testing.T) {
 	assert.Equal(clientNotFound, err)
 }
 
-func TestCreateClientDisableEmptyID(t *testing.T) {
+func TestClientDisableEmptyID(t *testing.T) {
 	assert := assert.New(t)
 	clientRepostory := mclient.NewMockClientRepository(t)
 	eventBus := mevent.NewMockEventBus(t)
@@ -144,7 +145,7 @@ func TestCreateClientDisableEmptyID(t *testing.T) {
 	assert.Equal(client.ErrClientIDEmpty, err)
 }
 
-func TestCreateClientEnableOk(t *testing.T) {
+func TestClientEnableOk(t *testing.T) {
 	assert := assert.New(t)
 	clientRepostory := mclient.NewMockClientRepository(t)
 	c, err := client.NewClient("clientID", "clientSecret", []string{"http://localhost:8080"})
@@ -175,10 +176,11 @@ func TestCreateClientEnableOk(t *testing.T) {
 		ClientID: "clientID",
 	})
 	assert.NoError(err)
-	assert.True(createdClient.IsEnabled())
+	assert.True(createdClient.Enabled)
+	assert.Equal("clientID", createdClient.ClientID)
 }
 
-func TestCreateClientEnableNotFound(t *testing.T) {
+func TestClientEnableNotFound(t *testing.T) {
 	clientNotFound := errors.New("client not found")
 	assert := assert.New(t)
 	clientRepostory := mclient.NewMockClientRepository(t)
@@ -197,7 +199,7 @@ func TestCreateClientEnableNotFound(t *testing.T) {
 	assert.Equal(clientNotFound, err)
 }
 
-func TestCreateClientEnableEmptyID(t *testing.T) {
+func TestClientEnableEmptyID(t *testing.T) {
 	assert := assert.New(t)
 	clientRepostory := mclient.NewMockClientRepository(t)
 	eventBus := mevent.NewMockEventBus(t)
@@ -225,11 +227,12 @@ func TestAuthenticateClientOk(t *testing.T) {
 		Return(c, nil).
 		Times(1)
 	authenticateClientService := client.NewAuthenticateClientService(clientRepostory)
-	_, err = authenticateClientService.AuthenticateClient(client.ClientAuthentication{
+	authenticated, err := authenticateClientService.AuthenticateClient(client.ClientAuthentication{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 	})
 	assert.NoError(err)
+	assert.Equal(clientID, authenticated.ClientID)
 }
 
 func TestAuthenticateClientEmptyID(t *testing.T) {
@@ -328,10 +331,13 @@ func TestGetClientByIDOk(t *testing.T) {
 		Return(c, nil).
 		Times(1)
 	getClientService := client.NewGetClientService(clientRepostory)
-	_, err = getClientService.GetClientByID(client.ClientByID{
+	client, err := getClientService.GetClientByID(client.ClientByID{
 		ClientID: clientID,
 	})
 	assert.NoError(err)
+	assert.Equal(clientID, client.ClientID)
+	assert.True(client.Enabled)
+	assert.Equal([]string{"http://localhost:8080"}, client.RedirectURIs)
 }
 
 func TestGetClientByIDEmptyID(t *testing.T) {

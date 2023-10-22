@@ -33,7 +33,7 @@ func (a AuthorizationCodeUserAgentGrantService) AuthorizeWithUserAgentParams(use
 	if err != nil {
 		return AuthorizationCodeUserAgentResponse{}, err
 	}
-	if !client.ExistsRedirectURI(userAgentGrant.RedirectURI) {
+	if !existsRedirectURI(userAgentGrant.RedirectURI, client.RedirectURIs) {
 		return AuthorizationCodeUserAgentResponse{}, ErrRedirectURINotFound
 	}
 	grantCode := AuthorizationCodeUserAgentResponse{
@@ -106,7 +106,7 @@ func (i ImplicitGrantService) AuthorizeImplicitWithUserAgentParams(implicit Impl
 	}
 	// FIXME: Validate redirect URI
 
-	if !client.ExistsRedirectURI(implicit.RedirectURI) {
+	if !existsRedirectURI(implicit.RedirectURI, client.RedirectURIs) {
 		return ImplicitUserAgentResponse{}, ErrRedirectURINotFound
 	}
 
@@ -176,4 +176,13 @@ func (c ClientCredentialsGrantService) AuthorizeWithClientCredentials(clientCred
 		RefreshToken: util.NewRandomCode(32),
 		Scope:        clientCredentials.Scope,
 	}, nil
+}
+
+func existsRedirectURI(redirectURI string, redirectURIs []string) bool {
+	for _, uri := range redirectURIs {
+		if uri == redirectURI {
+			return true
+		}
+	}
+	return false
 }
