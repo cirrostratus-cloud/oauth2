@@ -32,6 +32,11 @@ type AuthenticatedClientResult struct {
 	ClientID string
 }
 
+type UpdateRedirectURIsResult struct {
+	ClientID     string
+	RedirectURIs []string
+}
+
 type ClientByID struct {
 	ClientID string
 }

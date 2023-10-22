@@ -253,14 +253,15 @@ func (c AuthenticateClientService) AuthenticateClient(clientAuthentication Clien
 }
 
 type UpdateRedirectURIsService struct {
-	clientRepostory ClientRepository
+	clientRepostory                    ClientRepository
+	clientRedirectURIsUpdatedPublisher ClientRedirectURIsUpdatedPublisher
 }
 
-func NewUpdateRedirectURIsService(clientRepostory ClientRepository) UpdateRedirectURIsUseCase {
-	return UpdateRedirectURIsService{clientRepostory}
+func NewUpdateRedirectURIsService(clientRepostory ClientRepository, clientRedirectURIsUpdatedPublisher ClientRedirectURIsUpdatedPublisher) UpdateRedirectURIsUseCase {
+	return UpdateRedirectURIsService{clientRepostory, clientRedirectURIsUpdatedPublisher}
 }
 
-func (u UpdateRedirectURIsService) UpdateRedirectURIs(updateRedirectURIs UpdateRedirectURIs) (Client, error) {
+func (u UpdateRedirectURIsService) UpdateRedirectURIs(updateRedirectURIs UpdateRedirectURIs) (UpdateRedirectURIsResult, error) {
 	log.WithFields(log.Fields{
 		"clientID":     updateRedirectURIs.ClientID,
 		"redirectURIs": updateRedirectURIs.RedirectURIs,
@@ -270,11 +271,11 @@ func (u UpdateRedirectURIsService) UpdateRedirectURIs(updateRedirectURIs UpdateR
 		log.WithFields(log.Fields{
 			"clientID": updateRedirectURIs.ClientID,
 		}).Warn("Client ID is empty")
-		return Client{}, ErrClientIDEmpty
+		return UpdateRedirectURIsResult{}, ErrClientIDEmpty
 	}
 	client, err := u.clientRepostory.FindClientByID(updateRedirectURIs.ClientID)
 	if err != nil {
-		return client, err
+		return UpdateRedirectURIsResult{}, err
 	}
 	client.UpdateRedirectURIs(updateRedirectURIs.RedirectURIs)
 	client, err = u.clientRepostory.UpdateClient(client)
@@ -282,7 +283,20 @@ func (u UpdateRedirectURIsService) UpdateRedirectURIs(updateRedirectURIs UpdateR
 		log.WithFields(log.Fields{
 			"clientID": updateRedirectURIs.ClientID,
 		}).Error("Error updating client redirect URIs")
-		return client, err
+		return UpdateRedirectURIsResult{}, err
 	}
-	return client, nil
+	err = u.clientRedirectURIsUpdatedPublisher.ClientRedirectURIsUpdated(ClientRedirectURIsUpdatedEvent{
+		ClientID:     client.GetID(),
+		RedirectURIs: client.GetRedirectURIs(),
+	})
+	if err != nil {
+		log.WithFields(log.Fields{
+			"clientID": updateRedirectURIs.ClientID,
+		}).Error("Error publishing client redirect URIs updated event")
+		return UpdateRedirectURIsResult{}, err
+	}
+	return UpdateRedirectURIsResult{
+		ClientID:     client.GetID(),
+		RedirectURIs: client.GetRedirectURIs(),
+	}, nil
 }

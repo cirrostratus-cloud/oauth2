@@ -3,9 +3,10 @@ package client
 import "github.com/cirrostratus-cloud/common/event"
 
 const (
-	ClientCreatedEventName  event.EventName = "client/created"
-	ClientDisabledEventName event.EventName = "client/disabled"
-	ClientEnabledEventName  event.EventName = "client/enabled"
+	ClientCreatedEventName             event.EventName = "client/created"
+	ClientDisabledEventName            event.EventName = "client/disabled"
+	ClientEnabledEventName             event.EventName = "client/enabled"
+	ClientRedirectURIsUpdatedEventName event.EventName = "client/redirect_uris_updated"
 )
 
 type ClientCreatedEvent struct {
@@ -84,4 +85,32 @@ func NewClientEnabledPublisher(eventBus event.EventBus) ClientEnabledPublisher {
 
 func (p *clientEnabledPublisher) ClientEnabled(clientEnabledEvent ClientEnabledEvent) error {
 	return p.eventBus.Publish(ClientEnabledEventName, clientEnabledEvent)
+}
+
+type ClientRedirectURIsUpdatedEvent struct {
+	ClientID     string
+	RedirectURIs []string
+}
+
+func (e ClientRedirectURIsUpdatedEvent) GetPayload() map[string]interface{} {
+	return map[string]interface{}{
+		"clientID":     e.ClientID,
+		"redirectURIs": e.RedirectURIs,
+	}
+}
+
+type ClientRedirectURIsUpdatedPublisher interface {
+	ClientRedirectURIsUpdated(event ClientRedirectURIsUpdatedEvent) error
+}
+
+type clientRedirectURIsUpdatedPublisher struct {
+	eventBus event.EventBus
+}
+
+func NewClientRedirectURIsUpdatedPublisher(eventBus event.EventBus) ClientRedirectURIsUpdatedPublisher {
+	return &clientRedirectURIsUpdatedPublisher{eventBus: eventBus}
+}
+
+func (p *clientRedirectURIsUpdatedPublisher) ClientRedirectURIsUpdated(clientRedirectURIsUpdatedEvent ClientRedirectURIsUpdatedEvent) error {
+	return p.eventBus.Publish(ClientRedirectURIsUpdatedEventName, clientRedirectURIsUpdatedEvent)
 }

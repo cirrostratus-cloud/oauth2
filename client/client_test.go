@@ -367,3 +367,74 @@ func TestGetClientByIDNotFound(t *testing.T) {
 	assert.Error(err)
 	assert.Equal(clientNotFound, err)
 }
+
+func TestUpdateRedirectURIsOk(t *testing.T) {
+	assert := assert.New(t)
+	clientRepostory := mclient.NewMockClientRepository(t)
+	clientID := "clientID"
+	c, err := client.NewClient(clientID, "clientSecret", []string{"http://localhost:8080"})
+	assert.NoError(err)
+	clientRepostory.
+		EXPECT().
+		FindClientByID(clientID).
+		Return(c, nil).
+		Times(1)
+	clientRepostory.
+		On("UpdateClient", mock.AnythingOfType("client.Client")).
+		Return(func(c client.Client) (client.Client, error) {
+			return c, nil
+		}).
+		Times(1)
+	eventBus := mevent.NewMockEventBus(t)
+	eventBus.
+		EXPECT().
+		Publish(client.ClientRedirectURIsUpdatedEventName, client.ClientRedirectURIsUpdatedEvent{
+			ClientID:     clientID,
+			RedirectURIs: []string{"http://localhost:8080", "http://localhost:8081"},
+		}).
+		Return(nil).
+		Times(1)
+	clientRedirectURIsUpdatedPublisher := client.NewClientRedirectURIsUpdatedPublisher(eventBus)
+	updateRedirectURIsService := client.NewUpdateRedirectURIsService(clientRepostory, clientRedirectURIsUpdatedPublisher)
+	client, err := updateRedirectURIsService.UpdateRedirectURIs(client.UpdateRedirectURIs{
+		ClientID:     clientID,
+		RedirectURIs: []string{"http://localhost:8080", "http://localhost:8081"},
+	})
+	assert.NoError(err)
+	assert.Equal(clientID, client.ClientID)
+	assert.Equal([]string{"http://localhost:8080", "http://localhost:8081"}, client.RedirectURIs)
+}
+
+func TestUpdateRedirectURIsEmptyID(t *testing.T) {
+	assert := assert.New(t)
+	clientRepostory := mclient.NewMockClientRepository(t)
+	eventBus := mevent.NewMockEventBus(t)
+	clientRedirectURIsUpdatedPublisher := client.NewClientRedirectURIsUpdatedPublisher(eventBus)
+	updateRedirectURIsService := client.NewUpdateRedirectURIsService(clientRepostory, clientRedirectURIsUpdatedPublisher)
+	_, err := updateRedirectURIsService.UpdateRedirectURIs(client.UpdateRedirectURIs{
+		ClientID:     "",
+		RedirectURIs: []string{"http://localhost:8080", "http://localhost:8081"},
+	})
+	assert.Error(err)
+	assert.Equal(client.ErrClientIDEmpty, err)
+}
+
+func TestUpdateRedirectURIsNotFound(t *testing.T) {
+	clientNotFound := errors.New("client not found")
+	assert := assert.New(t)
+	clientRepostory := mclient.NewMockClientRepository(t)
+	clientRepostory.
+		EXPECT().
+		FindClientByID("clientID").
+		Return(client.Client{}, clientNotFound).
+		Times(1)
+	eventBus := mevent.NewMockEventBus(t)
+	clientRedirectURIsUpdatedPublisher := client.NewClientRedirectURIsUpdatedPublisher(eventBus)
+	updateRedirectURIsService := client.NewUpdateRedirectURIsService(clientRepostory, clientRedirectURIsUpdatedPublisher)
+	_, err := updateRedirectURIsService.UpdateRedirectURIs(client.UpdateRedirectURIs{
+		ClientID:     "clientID",
+		RedirectURIs: []string{"http://localhost:8080", "http://localhost:8081"},
+	})
+	assert.Error(err)
+	assert.Equal(clientNotFound, err)
+}

@@ -21,5 +21,5 @@ type AuthenticateClientUseCase interface {
 }
 
 type UpdateRedirectURIsUseCase interface {
-	UpdateRedirectURIs(updateRedirectURIs UpdateRedirectURIs) (Client, error)
+	UpdateRedirectURIs(updateRedirectURIs UpdateRedirectURIs) (UpdateRedirectURIsResult, error)
 }
