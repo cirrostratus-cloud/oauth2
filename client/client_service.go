@@ -1,6 +1,8 @@
 package client
 
 import (
+	"github.com/cirrostratus-cloud/common/event"
+	client_event "github.com/cirrostratus-cloud/oauth2/event"
 	util "github.com/cirrostratus-cloud/oauth2/util"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
@@ -8,9 +10,9 @@ import (
 )
 
 type CreateClientService struct {
-	secretLenght           int
-	clientRepostory        ClientRepository
-	clientCreatedPublisher ClientCreatedPublisher
+	secretLenght    int
+	clientRepostory ClientRepository
+	eventBus        event.EventBus
 }
 
 func (c CreateClientService) NewClient(createClient CreateClient) (CreateClientResult, error) {
@@ -35,7 +37,7 @@ func (c CreateClientService) NewClient(createClient CreateClient) (CreateClientR
 	log.WithFields(log.Fields{
 		"clientID": client.GetID(),
 	}).Info("Client created")
-	err = c.clientCreatedPublisher.ClientCreated(ClientCreatedEvent{
+	err = c.eventBus.Publish(client_event.ClientCreatedEventName, client_event.ClientCreatedEvent{
 		ClientID: client.GetID(),
 	})
 	if err != nil {
@@ -53,11 +55,11 @@ func (c CreateClientService) NewClient(createClient CreateClient) (CreateClientR
 	}, nil
 }
 
-func NewCreateClientService(secretLenght int, clientRepostory ClientRepository, clientCreatedPublisher ClientCreatedPublisher) CreateClientUseCase {
+func NewCreateClientService(secretLenght int, clientRepostory ClientRepository, eventBus event.EventBus) CreateClientUseCase {
 	return CreateClientService{
-		secretLenght:           secretLenght,
-		clientRepostory:        clientRepostory,
-		clientCreatedPublisher: clientCreatedPublisher,
+		secretLenght:    secretLenght,
+		clientRepostory: clientRepostory,
+		eventBus:        eventBus,
 	}
 }
 
@@ -104,14 +106,14 @@ func (c GetClientService) GetClientByID(clientByID ClientByID) (GetClientResult,
 }
 
 type DisableClientService struct {
-	clientRepostory         ClientRepository
-	clientDisabledPublisher ClientDisabledPublisher
+	clientRepostory ClientRepository
+	eventBus        event.EventBus
 }
 
-func NewDisableClientService(clientRepostory ClientRepository, clientDisabledPublisher ClientDisabledPublisher) DisableClientUseCase {
+func NewDisableClientService(clientRepostory ClientRepository, eventBus event.EventBus) DisableClientUseCase {
 	return DisableClientService{
 		clientRepostory,
-		clientDisabledPublisher}
+		eventBus}
 }
 
 func (c DisableClientService) DisableClientByID(clientByID ClientByID) (DisabledClientResult, error) {
@@ -138,7 +140,7 @@ func (c DisableClientService) DisableClientByID(clientByID ClientByID) (Disabled
 		client, err = c.clientRepostory.UpdateClient(client)
 		return DisabledClientResult{}, err
 	}
-	err = c.clientDisabledPublisher.ClientDisabled(ClientDisabledEvent{
+	err = c.eventBus.Publish(client_event.ClientDisabledEventName, client_event.ClientDisabledEvent{
 		ClientID: client.GetID(),
 	})
 	if err != nil {
@@ -156,14 +158,14 @@ func (c DisableClientService) DisableClientByID(clientByID ClientByID) (Disabled
 }
 
 type EnableClientService struct {
-	clientRepostory       ClientRepository
-	clientEnablePublisher ClientEnabledPublisher
+	clientRepostory ClientRepository
+	eventBus        event.EventBus
 }
 
-func NewEnableClientService(clientRepostory ClientRepository, clientEnablePublisher ClientEnabledPublisher) EnableClientUseCase {
+func NewEnableClientService(clientRepostory ClientRepository, eventBus event.EventBus) EnableClientUseCase {
 	return EnableClientService{
-		clientRepostory:       clientRepostory,
-		clientEnablePublisher: clientEnablePublisher,
+		clientRepostory: clientRepostory,
+		eventBus:        eventBus,
 	}
 }
 
@@ -191,7 +193,7 @@ func (c EnableClientService) EnableClientByID(clientByID ClientByID) (EnabledCli
 		client, err = c.clientRepostory.UpdateClient(client)
 		return EnabledClientResult{}, err
 	}
-	err = c.clientEnablePublisher.ClientEnabled(ClientEnabledEvent{
+	err = c.eventBus.Publish(client_event.ClientEnabledEventName, client_event.ClientEnabledEvent{
 		ClientID: client.GetID(),
 	})
 	if err != nil {
@@ -253,12 +255,12 @@ func (c AuthenticateClientService) AuthenticateClient(clientAuthentication Clien
 }
 
 type UpdateRedirectURIsService struct {
-	clientRepostory                    ClientRepository
-	clientRedirectURIsUpdatedPublisher ClientRedirectURIsUpdatedPublisher
+	clientRepostory ClientRepository
+	eventBus        event.EventBus
 }
 
-func NewUpdateRedirectURIsService(clientRepostory ClientRepository, clientRedirectURIsUpdatedPublisher ClientRedirectURIsUpdatedPublisher) UpdateRedirectURIsUseCase {
-	return UpdateRedirectURIsService{clientRepostory, clientRedirectURIsUpdatedPublisher}
+func NewUpdateRedirectURIsService(clientRepostory ClientRepository, eventBus event.EventBus) UpdateRedirectURIsUseCase {
+	return UpdateRedirectURIsService{clientRepostory, eventBus}
 }
 
 func (u UpdateRedirectURIsService) UpdateRedirectURIs(updateRedirectURIs UpdateRedirectURIs) (UpdateRedirectURIsResult, error) {
@@ -285,7 +287,7 @@ func (u UpdateRedirectURIsService) UpdateRedirectURIs(updateRedirectURIs UpdateR
 		}).Error("Error updating client redirect URIs")
 		return UpdateRedirectURIsResult{}, err
 	}
-	err = u.clientRedirectURIsUpdatedPublisher.ClientRedirectURIsUpdated(ClientRedirectURIsUpdatedEvent{
+	err = u.eventBus.Publish(client_event.ClientRedirectURIsUpdatedEventName, client_event.ClientRedirectURIsUpdatedEvent{
 		ClientID:     client.GetID(),
 		RedirectURIs: client.GetRedirectURIs(),
 	})

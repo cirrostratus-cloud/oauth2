@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/cirrostratus-cloud/oauth2/client"
+	client_event "github.com/cirrostratus-cloud/oauth2/event"
 	mevent "github.com/cirrostratus-cloud/oauth2/mocks/github.com/cirrostratus-cloud/common/event"
 	mclient "github.com/cirrostratus-cloud/oauth2/mocks/github.com/cirrostratus-cloud/oauth2/client"
 	"github.com/cirrostratus-cloud/oauth2/util"
@@ -30,11 +31,10 @@ func TestCreateClientOk(t *testing.T) {
 	eventBus := mevent.NewMockEventBus(t)
 	eventBus.
 		EXPECT().
-		Publish(client.ClientCreatedEventName, mock.Anything).
+		Publish(client_event.ClientCreatedEventName, mock.Anything).
 		Return(nil).
 		Times(1)
-	clientCreatedPublisher := client.NewClientCreatedPublisher(eventBus)
-	createClientService := client.NewCreateClientService(10, clientRepostory, clientCreatedPublisher)
+	createClientService := client.NewCreateClientService(10, clientRepostory, eventBus)
 	createdResult, err := createClientService.NewClient(client.CreateClient{
 		RedirectURIs: []string{"http://localhost:8080"},
 	})
@@ -54,8 +54,7 @@ func TestCreateClientInvalidURI(t *testing.T) {
 		Return(client.Client{}, nil).
 		Times(1)
 	eventBus := mevent.NewMockEventBus(t)
-	clientCreatedPublisher := client.NewClientCreatedPublisher(eventBus)
-	createClientService := client.NewCreateClientService(10, clientRepostory, clientCreatedPublisher)
+	createClientService := client.NewCreateClientService(10, clientRepostory, eventBus)
 	_, err := createClientService.NewClient(client.CreateClient{
 		RedirectURIs: []string{"http://localhost:8080", "cirrostratus.cloud.com/callback"},
 	})
@@ -72,8 +71,7 @@ func TestCreateClientNoRedirectURIs(t *testing.T) {
 		Return(client.Client{}, nil).
 		Times(1)
 	eventBus := mevent.NewMockEventBus(t)
-	clientCreatedPublisher := client.NewClientCreatedPublisher(eventBus)
-	createClientService := client.NewCreateClientService(10, clientRepostory, clientCreatedPublisher)
+	createClientService := client.NewCreateClientService(10, clientRepostory, eventBus)
 	_, err := createClientService.NewClient(client.CreateClient{})
 	assert.Error(err)
 	assert.Equal(client.ErrRedirectURISEmpty, err)
@@ -98,13 +96,12 @@ func TestClientDisableOk(t *testing.T) {
 	eventBus := mevent.NewMockEventBus(t)
 	eventBus.
 		EXPECT().
-		Publish(client.ClientDisabledEventName, client.ClientDisabledEvent{
+		Publish(client_event.ClientDisabledEventName, client_event.ClientDisabledEvent{
 			ClientID: "clientID",
 		}).
 		Return(nil).
 		Times(1)
-	clientDisabledPublisher := client.NewClientDisabledPublisher(eventBus)
-	createClientService := client.NewDisableClientService(clientRepostory, clientDisabledPublisher)
+	createClientService := client.NewDisableClientService(clientRepostory, eventBus)
 	createdClient, err := createClientService.DisableClientByID(client.ClientByID{
 		ClientID: "clientID",
 	})
@@ -123,8 +120,7 @@ func TestClientDisableNotFound(t *testing.T) {
 		Return(client.Client{}, clientNotFound).
 		Times(1)
 	eventBus := mevent.NewMockEventBus(t)
-	clientDisabledPublisher := client.NewClientDisabledPublisher(eventBus)
-	createClientService := client.NewDisableClientService(clientRepostory, clientDisabledPublisher)
+	createClientService := client.NewDisableClientService(clientRepostory, eventBus)
 	_, err := createClientService.DisableClientByID(client.ClientByID{
 		ClientID: "clientID",
 	})
@@ -136,8 +132,7 @@ func TestClientDisableEmptyID(t *testing.T) {
 	assert := assert.New(t)
 	clientRepostory := mclient.NewMockClientRepository(t)
 	eventBus := mevent.NewMockEventBus(t)
-	clientDisabledPublisher := client.NewClientDisabledPublisher(eventBus)
-	createClientService := client.NewDisableClientService(clientRepostory, clientDisabledPublisher)
+	createClientService := client.NewDisableClientService(clientRepostory, eventBus)
 	_, err := createClientService.DisableClientByID(client.ClientByID{
 		ClientID: "",
 	})
@@ -165,13 +160,12 @@ func TestClientEnableOk(t *testing.T) {
 	eventBus := mevent.NewMockEventBus(t)
 	eventBus.
 		EXPECT().
-		Publish(client.ClientEnabledEventName, client.ClientEnabledEvent{
+		Publish(client_event.ClientEnabledEventName, client_event.ClientEnabledEvent{
 			ClientID: "clientID",
 		}).
 		Return(nil).
 		Times(1)
-	clientEnabledPublisher := client.NewClientEnabledPublisher(eventBus)
-	createClientService := client.NewEnableClientService(clientRepostory, clientEnabledPublisher)
+	createClientService := client.NewEnableClientService(clientRepostory, eventBus)
 	createdClient, err := createClientService.EnableClientByID(client.ClientByID{
 		ClientID: "clientID",
 	})
@@ -190,8 +184,7 @@ func TestClientEnableNotFound(t *testing.T) {
 		Return(client.Client{}, clientNotFound).
 		Times(1)
 	eventBus := mevent.NewMockEventBus(t)
-	clientEnabledPublisher := client.NewClientEnabledPublisher(eventBus)
-	createClientService := client.NewEnableClientService(clientRepostory, clientEnabledPublisher)
+	createClientService := client.NewEnableClientService(clientRepostory, eventBus)
 	_, err := createClientService.EnableClientByID(client.ClientByID{
 		ClientID: "clientID",
 	})
@@ -203,8 +196,7 @@ func TestClientEnableEmptyID(t *testing.T) {
 	assert := assert.New(t)
 	clientRepostory := mclient.NewMockClientRepository(t)
 	eventBus := mevent.NewMockEventBus(t)
-	clientEnabledPublisher := client.NewClientEnabledPublisher(eventBus)
-	createClientService := client.NewEnableClientService(clientRepostory, clientEnabledPublisher)
+	createClientService := client.NewEnableClientService(clientRepostory, eventBus)
 	_, err := createClientService.EnableClientByID(client.ClientByID{
 		ClientID: "",
 	})
@@ -388,14 +380,13 @@ func TestUpdateRedirectURIsOk(t *testing.T) {
 	eventBus := mevent.NewMockEventBus(t)
 	eventBus.
 		EXPECT().
-		Publish(client.ClientRedirectURIsUpdatedEventName, client.ClientRedirectURIsUpdatedEvent{
+		Publish(client_event.ClientRedirectURIsUpdatedEventName, client_event.ClientRedirectURIsUpdatedEvent{
 			ClientID:     clientID,
 			RedirectURIs: []string{"http://localhost:8080", "http://localhost:8081"},
 		}).
 		Return(nil).
 		Times(1)
-	clientRedirectURIsUpdatedPublisher := client.NewClientRedirectURIsUpdatedPublisher(eventBus)
-	updateRedirectURIsService := client.NewUpdateRedirectURIsService(clientRepostory, clientRedirectURIsUpdatedPublisher)
+	updateRedirectURIsService := client.NewUpdateRedirectURIsService(clientRepostory, eventBus)
 	client, err := updateRedirectURIsService.UpdateRedirectURIs(client.UpdateRedirectURIs{
 		ClientID:     clientID,
 		RedirectURIs: []string{"http://localhost:8080", "http://localhost:8081"},
@@ -409,8 +400,7 @@ func TestUpdateRedirectURIsEmptyID(t *testing.T) {
 	assert := assert.New(t)
 	clientRepostory := mclient.NewMockClientRepository(t)
 	eventBus := mevent.NewMockEventBus(t)
-	clientRedirectURIsUpdatedPublisher := client.NewClientRedirectURIsUpdatedPublisher(eventBus)
-	updateRedirectURIsService := client.NewUpdateRedirectURIsService(clientRepostory, clientRedirectURIsUpdatedPublisher)
+	updateRedirectURIsService := client.NewUpdateRedirectURIsService(clientRepostory, eventBus)
 	_, err := updateRedirectURIsService.UpdateRedirectURIs(client.UpdateRedirectURIs{
 		ClientID:     "",
 		RedirectURIs: []string{"http://localhost:8080", "http://localhost:8081"},
@@ -429,8 +419,7 @@ func TestUpdateRedirectURIsNotFound(t *testing.T) {
 		Return(client.Client{}, clientNotFound).
 		Times(1)
 	eventBus := mevent.NewMockEventBus(t)
-	clientRedirectURIsUpdatedPublisher := client.NewClientRedirectURIsUpdatedPublisher(eventBus)
-	updateRedirectURIsService := client.NewUpdateRedirectURIsService(clientRepostory, clientRedirectURIsUpdatedPublisher)
+	updateRedirectURIsService := client.NewUpdateRedirectURIsService(clientRepostory, eventBus)
 	_, err := updateRedirectURIsService.UpdateRedirectURIs(client.UpdateRedirectURIs{
 		ClientID:     "clientID",
 		RedirectURIs: []string{"http://localhost:8080", "http://localhost:8081"},
