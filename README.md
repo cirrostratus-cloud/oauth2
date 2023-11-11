@@ -2,10 +2,20 @@
 
 - [Cirrostratus - OAuth2](#cirrostratus---oauth2)
   - [Development](#development)
+    - [Branching](#branching)
+    - [Tagging](#tagging)
     - [Requirements](#requirements)
     - [Tests](#tests)
 
 ## Development
+
+### Branching
+
+- [Semantic Commit Messages](https://gist.github.com/joshbuchea/6f47e86d2510bce28f8e7f42ae84c716)
+
+### Tagging
+
+- [Semantic Versioning](https://semver.org/)
 
 ### Requirements
 
