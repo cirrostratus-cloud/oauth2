@@ -1,5 +1,14 @@
 package user
 
+import (
+	"errors"
+
+	"github.com/cirrostratus-cloud/oauth2/util"
+)
+
+var ErrEmailInvalid = errors.New("email is invalid")
+var ErrPasswordInvalid = errors.New("password is invalid")
+
 type User struct {
 	id        string
 	email     string
@@ -37,24 +46,31 @@ func (u User) IsEnabled() bool {
 	return u.enabled
 }
 
-func (u User) DisableUser() {
+func (u *User) DisableUser() {
 	u.enabled = false
 }
 
-func (u User) EnableUser() {
+func (u *User) EnableUser() {
 	u.enabled = true
 }
 
-func (u *User) SaveProfile(firstName string, lastName string) {
+func (u *User) UpdateUserProfile(firstName string, lastName string) {
 	if firstName != "" {
-		firstName = u.firstName
+		u.firstName = firstName
 	}
 	if lastName != "" {
-		lastName = u.lastName
+		u.lastName = lastName
 	}
 }
 
-func NewUser(id string, email string, password string) User {
-	// FIXME: validate email
-	return User{id: id, email: email, password: password, enabled: true}
+func NewUser(id string, email string, password string) (User, error) {
+	if !util.ValidateEmail(email) {
+		return User{}, ErrEmailInvalid
+	}
+
+	if password == "" {
+		return User{}, ErrPasswordInvalid
+	}
+
+	return User{id: id, email: email, password: password, enabled: true}, nil
 }
