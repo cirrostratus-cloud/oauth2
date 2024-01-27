@@ -6,9 +6,13 @@ import (
 
 	"github.com/cirrostratus-cloud/common/uuid"
 	"github.com/cirrostratus-cloud/oauth2/util"
+	log "github.com/sirupsen/logrus"
 )
 
 var ErrAuthorizationSessionExpired = errors.New("authorization session expired")
+var ErrAuthorizationCodeExpired = errors.New("authorization code expired")
+var ErrClientIDMismatch = errors.New("client id mismatch")
+var ErrRedirectURIMismatch = errors.New("redirect uri mismatch")
 
 type CreateAuthorizationSessionService struct {
 	authorizationSessionRepository AuthorizationSessionRepository
@@ -19,17 +23,25 @@ func NewCreateAuthorizationSessionService(authorizationSessionRepository Authori
 	return CreateAuthorizationSessionService{authorizationSessionRepository: authorizationSessionRepository, maxAgeInSeconds: maxAgeInSeconds}
 }
 
-func (a CreateAuthorizationSessionService) NewAuthorizationSession(redirectURI string, state string) (SessionGrant, error) {
-	err := util.ValidateHTTPURL(redirectURI)
+func (a CreateAuthorizationSessionService) NewAuthorizationSession(sessionGrantRequest SessionGrantRequest) (SessionGrantResponse, error) {
+	err := util.ValidateHTTPURL(sessionGrantRequest.RedirectURI)
 	if err != nil {
-		return SessionGrant{}, err
+		return SessionGrantResponse{}, err
 	}
-	authorizationSession := NewAuthorizationSession(uuid.NewV4(), time.Now().Add(time.Duration(a.maxAgeInSeconds)*time.Second), redirectURI, state)
+	authorizationSession := NewAuthorizationSession(
+		uuid.NewV4(),
+		time.Now().Add(time.Duration(a.maxAgeInSeconds)*time.Second),
+		sessionGrantRequest.RedirectURI,
+		sessionGrantRequest.State,
+	)
 	_, err = a.authorizationSessionRepository.CreateAuthorizationSession(authorizationSession)
 	if err != nil {
-		return SessionGrant{}, err
+		return SessionGrantResponse{}, err
 	}
-	return SessionGrant{SessionID: authorizationSession.GetID(), ExpirationTime: authorizationSession.GetExpirationTimeInSeconds()}, nil
+	return SessionGrantResponse{
+		SessionID:      authorizationSession.GetID(),
+		ExpirationTime: authorizationSession.GetExpirationTimeInSeconds(),
+	}, nil
 }
 
 type GetAuthorizationSessionService struct {
@@ -40,35 +52,73 @@ func NewGetAuthorizationSessionService(authorizationSessionRepository Authorizat
 	return GetAuthorizationSessionService{authorizationSessionRepository: authorizationSessionRepository}
 }
 
-func (a GetAuthorizationSessionService) GetAuthorizationSessionByID(sessionID string) (AuthorizationSession, error) {
-	authorizationSession, err := a.authorizationSessionRepository.FindAuthorizationSessionByID(sessionID)
+func (a GetAuthorizationSessionService) GetAuthorizationSessionByID(sessionByID SessionByID) (AuthorizationSessionResponse, error) {
+	authorizationSession, err := a.authorizationSessionRepository.FindAuthorizationSessionByID(sessionByID.SessionID)
 	if err != nil {
-		return AuthorizationSession{}, err
+		return AuthorizationSessionResponse{}, err
 	}
 	if authorizationSession.IsExpired() {
-		return AuthorizationSession{}, ErrAuthorizationSessionExpired
+		return AuthorizationSessionResponse{}, ErrAuthorizationSessionExpired
 	}
-	return authorizationSession, nil
+	return AuthorizationSessionResponse{
+		RedirectURI: authorizationSession.GetRedirectionURI(),
+		State:       authorizationSession.GetState(),
+		ExpiresIn:   authorizationSession.GetExpirationTimeInSeconds(),
+	}, nil
 }
 
 type CreateAuthorizationCodeService struct {
 	authorizationAuthorizationCodeRepository AuthorizationCodeRepository
 	expirationTime                           time.Time
+	codeLenght                               int
 }
 
-func (a CreateAuthorizationCodeService) NewAuthorizationCode(code string, redirectionURI string, clientID string) (AuthorizationCode, error) {
-	err := util.ValidateHTTPURL(redirectionURI)
+func (a CreateAuthorizationCodeService) NewAuthorizationCode(authorizationCodeGrant AuthorizationCodeGrantRequest) (AuthorizationCodeGrantResponse, error) {
+	err := util.ValidateHTTPURL(authorizationCodeGrant.RedirectURI)
 	if err != nil {
-		return AuthorizationCode{}, err
+		log.WithFields(log.Fields{
+			"redirect_uri": authorizationCodeGrant.RedirectURI,
+		}).Error("Invalid redirect URI")
+		return AuthorizationCodeGrantResponse{}, err
 	}
-	authorizationAuthorizationCode := NewAuthorizationCode(code, redirectionURI, a.expirationTime, clientID)
+	authorizationAuthorizationCode := NewAuthorizationCode(util.NewRandomCode(a.codeLenght), authorizationCodeGrant.RedirectURI, a.expirationTime, authorizationCodeGrant.ClientID)
 	authorizationAuthorizationCode, err = a.authorizationAuthorizationCodeRepository.CreateAuthorizationCode(authorizationAuthorizationCode)
 	if err != nil {
-		return AuthorizationCode{}, err
+		return AuthorizationCodeGrantResponse{}, err
 	}
-	return authorizationAuthorizationCode, nil
+	return AuthorizationCodeGrantResponse{
+		Code: authorizationAuthorizationCode.GetCode(),
+	}, nil
 }
 
-func NewCreateAuthorizationCodeService(authorizationAuthorizationCodeRepository AuthorizationCodeRepository, expirationTime time.Time) CreateAuthorizationCodeUseCase {
-	return CreateAuthorizationCodeService{authorizationAuthorizationCodeRepository: authorizationAuthorizationCodeRepository, expirationTime: expirationTime}
+func NewCreateAuthorizationCodeService(authorizationAuthorizationCodeRepository AuthorizationCodeRepository, expirationTime time.Time, codeLenght int) CreateAuthorizationCodeUseCase {
+	return CreateAuthorizationCodeService{authorizationAuthorizationCodeRepository: authorizationAuthorizationCodeRepository, expirationTime: expirationTime, codeLenght: codeLenght}
+}
+
+type GetAuthorizationCodeService struct {
+	authorizationAuthorizationCodeRepository AuthorizationCodeRepository
+}
+
+func NewGetAuthorizationCodeService(authorizationAuthorizationCodeRepository AuthorizationCodeRepository) GetAuthorizationCodeUseCase {
+	return GetAuthorizationCodeService{authorizationAuthorizationCodeRepository: authorizationAuthorizationCodeRepository}
+}
+
+func (a GetAuthorizationCodeService) GetAuthorizationCodeByCode(authorizationCodeGrant AuthorizationCodeGrantRequest) (AuthorizationCodeGrantResponse, error) {
+	authorizationAuthorizationCode, err := a.authorizationAuthorizationCodeRepository.FindAuthorizationCodeByCode(authorizationCodeGrant.Code)
+	if err != nil {
+		return AuthorizationCodeGrantResponse{}, err
+	}
+	if authorizationAuthorizationCode.IsExpired() {
+		return AuthorizationCodeGrantResponse{}, ErrAuthorizationCodeExpired
+	}
+	if authorizationAuthorizationCode.GetClientID() != authorizationCodeGrant.ClientID {
+		return AuthorizationCodeGrantResponse{}, ErrClientIDMismatch
+	}
+	if authorizationAuthorizationCode.GetRedirectionURI() != authorizationCodeGrant.RedirectURI {
+		return AuthorizationCodeGrantResponse{}, ErrRedirectURIMismatch
+	}
+	return AuthorizationCodeGrantResponse{
+		Code:     authorizationAuthorizationCode.GetCode(),
+		ClientID: authorizationAuthorizationCode.GetClientID(),
+	}, nil
 }

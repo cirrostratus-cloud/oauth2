@@ -17,7 +17,7 @@ func (a AuthorizationSession) GetID() string {
 
 // Function to get expiration time in seconds
 func (a AuthorizationSession) GetExpirationTimeInSeconds() int {
-	return a.expirationTime.Second()
+	return int(a.expirationTime.Unix())
 }
 
 // Function to get redirection URI

@@ -1,17 +1,17 @@
 package authorization
 
 type GetAuthorizationSessionUseCase interface {
-	GetAuthorizationSessionByID(sessionID string) (AuthorizationSession, error)
+	GetAuthorizationSessionByID(SessionByID) (AuthorizationSessionResponse, error)
 }
 
 type CreateAuthorizationCodeUseCase interface {
-	NewAuthorizationCode(code string, redirectionURI string, clientID string) (AuthorizationCode, error)
+	NewAuthorizationCode(AuthorizationCodeGrantRequest) (AuthorizationCodeGrantResponse, error)
 }
 
 type GetAuthorizationCodeUseCase interface {
-	GetAuthorizationCodeByCode(code string) (AuthorizationCode, error)
+	GetAuthorizationCodeByCode(AuthorizationCodeGrantRequest) (AuthorizationCodeGrantResponse, error)
 }
 
 type CreateAuthorizationSessionUseCase interface {
-	NewAuthorizationSession(redirectURI string, state string) (SessionGrant, error)
+	NewAuthorizationSession(SessionGrantRequest) (SessionGrantResponse, error)
 }

@@ -1,5 +1,9 @@
 package authorization
 
+import "errors"
+
+var ErrAuthorizationSessionNotFound = errors.New("authorization session not found")
+
 type AuthorizationSessionRepository interface {
 	CreateAuthorizationSession(auhtorizationSession AuthorizationSession) (AuthorizationSession, error)
 	FindAuthorizationSessionByID(sessionID string) (AuthorizationSession, error)

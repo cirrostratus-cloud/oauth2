@@ -2,109 +2,241 @@ package grant
 
 import (
 	"errors"
+	"time"
 
+	"github.com/cirrostratus-cloud/common/ulid"
 	"github.com/cirrostratus-cloud/oauth2/authorization"
 	"github.com/cirrostratus-cloud/oauth2/client"
-	"github.com/cirrostratus-cloud/oauth2/util"
+	"github.com/dgrijalva/jwt-go"
+	log "github.com/sirupsen/logrus"
 )
 
 var ErrRedirectURINotFound = errors.New("redirect URI not found")
+var ErrInvalidGrantType = errors.New("invalid grant type")
+var ErrSessionCodeExpired = errors.New("session code expired")
+var ErrInvalidResponseType = errors.New("invalid response type")
+
+type tokens struct {
+	AccessToken  string
+	RefreshToken string
+	ExpiresIn    int
+}
+
+// TODO: Cambiar esto por un caso de uso
+func getTokens(createAccessTokenUseCase CreateAccessTokenUseCase, createRefreshTokenUseCase CreateRefreshTokenUseCase, clientID string, privateKey []byte) (tokens, error) {
+	log.WithFields(log.Fields{
+		"client_id": clientID,
+	}).Info("Get tokens")
+	accessToken, err := createAccessTokenUseCase.NewAccessToken(clientID)
+	if err != nil {
+		return tokens{}, err
+	}
+	accessTokenString, err := getAccessTokenString(accessToken, privateKey)
+	if err != nil {
+		return tokens{}, err
+	}
+	refreshToken, err := createRefreshTokenUseCase.NewRefreshToken(clientID)
+	if err != nil {
+		return tokens{}, err
+	}
+	refreshTokenString, err := getRefreshTokenString(refreshToken, privateKey)
+	if err != nil {
+		return tokens{}, err
+	}
+	return tokens{
+		AccessToken:  accessTokenString,
+		RefreshToken: refreshTokenString,
+		ExpiresIn:    accessToken.GetExpirationTimeInSeconds(),
+	}, nil
+}
 
 type AuthorizationCodeUserAgentGrantService struct {
-	codeLenght                     int
 	getClientService               client.GetClientUseCase
 	createAuthorizationCodeUseCase authorization.CreateAuthorizationCodeUseCase
 }
 
 func NewAuthorizationCodeUserAgentGrantService(codeLenght int, getClientService client.GetClientService) AuthorizationUserAgentUseCase {
-	return AuthorizationCodeUserAgentGrantService{codeLenght: codeLenght, getClientService: getClientService}
+	return AuthorizationCodeUserAgentGrantService{getClientService: getClientService}
 }
 
 func (a AuthorizationCodeUserAgentGrantService) AuthorizeWithUserAgentParams(userAgentGrant AuthorizationCodeUserAgentRequest) (AuthorizationCodeUserAgentResponse, error) {
-	// FIXME: Add logs
+	log.WithFields(log.Fields{
+		"client_id":     userAgentGrant.ClientID,
+		"redirect_uri":  userAgentGrant.RedirectURI,
+		"response_type": userAgentGrant.ResponseType,
+		"scope":         userAgentGrant.Scope,
+		"state":         userAgentGrant.State,
+	}).Info("Authorize with user agent")
 	if userAgentGrant.ResponseType != string(ResponseTypeCode) {
 		return AuthorizationCodeUserAgentResponse{}, errors.New("invalid response type")
 	}
-	// FIXME: Validate redirect URI
-	// FIXME: Validate client credentials
 	client, err := a.getClientService.GetClientByID(client.ClientByID{
 		ClientID: userAgentGrant.ClientID,
 	})
 	if err != nil {
+		log.WithFields(log.Fields{
+			"client_id": userAgentGrant.ClientID,
+		}).Error("Get client by ID error")
 		return AuthorizationCodeUserAgentResponse{}, err
 	}
 	if !existsRedirectURI(userAgentGrant.RedirectURI, client.RedirectURIs) {
+		log.WithFields(log.Fields{
+			"client_id":    userAgentGrant.ClientID,
+			"redirect_uri": userAgentGrant.RedirectURI,
+		}).Error("Redirect URI not found")
 		return AuthorizationCodeUserAgentResponse{}, ErrRedirectURINotFound
 	}
+	authorizationCode, err := a.createAuthorizationCodeUseCase.NewAuthorizationCode(authorization.AuthorizationCodeGrantRequest{
+		ClientID:    userAgentGrant.ClientID,
+		RedirectURI: userAgentGrant.RedirectURI,
+	})
+	if err != nil {
+		log.WithFields(log.Fields{
+			"client_id":    userAgentGrant.ClientID,
+			"redirect_uri": userAgentGrant.RedirectURI,
+		}).Error("Create authorization code error")
+		return AuthorizationCodeUserAgentResponse{}, err
+	}
 	grantCode := AuthorizationCodeUserAgentResponse{
-		Code:        util.NewRandomCode(a.codeLenght),
+		Code:        authorizationCode.Code,
 		State:       userAgentGrant.State,
 		ErrorCode:   ErrorCodeEmpty,
 		RedirectURI: userAgentGrant.RedirectURI,
-	}
-	_, err = a.createAuthorizationCodeUseCase.NewAuthorizationCode(grantCode.Code, userAgentGrant.RedirectURI, userAgentGrant.ClientID)
-	if err != nil {
-		return AuthorizationCodeUserAgentResponse{}, err
 	}
 	return grantCode, nil
 }
 
 type AuthorizationCodeService struct {
-	getClientService                   client.GetClientUseCase
-	getAuthorizationCodeUseService     authorization.GetAuthorizationCodeUseCase
-	accessTokenExpirationTimeInSeconds int
+	getClientService               client.GetClientUseCase
+	getAuthorizationCodeUseService authorization.GetAuthorizationCodeUseCase
+	createAccessTokenService       CreateAccessTokenUseCase
+	createRefreshTokenService      CreateRefreshTokenUseCase
+	privateKey                     []byte
 }
 
-func NewAuthorizationCodeService(getClientService client.GetClientUseCase, getAuthorizationCodeUseService authorization.GetAuthorizationCodeUseCase) AuthorizationCodeGrantUseCase {
-	return AuthorizationCodeService{getClientService: getClientService, getAuthorizationCodeUseService: getAuthorizationCodeUseService}
+func NewAuthorizationCodeService(getClientService client.GetClientUseCase, getAuthorizationCodeUseService authorization.GetAuthorizationCodeUseCase, createAccessTokenUserCase CreateAccessTokenUseCase, createResfreshTokenUseCase CreateRefreshTokenUseCase, privateKey []byte) AuthorizationCodeGrantUseCase {
+	return AuthorizationCodeService{getClientService: getClientService, getAuthorizationCodeUseService: getAuthorizationCodeUseService, createAccessTokenService: createAccessTokenUserCase, createRefreshTokenService: createResfreshTokenUseCase, privateKey: privateKey}
+}
+
+func getAccessTokenString(accessToken AccessToken, privateKey []byte) (string, error) {
+	claims := jwt.MapClaims{
+		"iss":             accessToken.GetIssuer(),
+		"sub":             accessToken.GetSubject(),
+		"aud":             accessToken.GetAudience(),
+		"exp":             accessToken.GetExpirationTimeInSeconds(),
+		"additional_data": accessToken.GetAdditionalData(),
+	}
+	accessTokenClaims := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	accessTokenString, err := accessTokenClaims.SignedString(privateKey)
+	if err != nil {
+		return "", err
+	}
+	return accessTokenString, nil
+}
+
+func getRefreshTokenString(refreshToken RefreshToken, privateKey []byte) (string, error) {
+	claims := jwt.MapClaims{
+		"iss": refreshToken.GetIssuer(),
+		"sub": refreshToken.GetSubject(),
+		"aud": refreshToken.GetAudience(),
+		"exp": refreshToken.GetExpirationTimeInSeconds(),
+	}
+	refreshTokenClaims := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	refreshTokenString, err := refreshTokenClaims.SignedString(privateKey)
+	if err != nil {
+		return "", err
+	}
+	return refreshTokenString, nil
 }
 
 func (a AuthorizationCodeService) AuthorizeWithCode(authorizationCode AuthorizationCodeRequest) (AuthorizationCodeResponse, error) {
-	// FIXME: Add logs
-	// FIXME: Validate client credentials
-	// FIXME: Validate scopes
+	log.WithFields(log.Fields{
+		"client_id":    authorizationCode.ClientID,
+		"grant_type":   authorizationCode.GrantType,
+		"redirect_uri": authorizationCode.RedirectURI,
+	}).Info("Authorize with code")
 	if authorizationCode.GrantType != string(GrantTypeAuthorizationCodeRequest) {
-		return AuthorizationCodeResponse{}, errors.New("invalid grant type")
+		return AuthorizationCodeResponse{}, ErrInvalidGrantType
 	}
-	codeSession, err := a.getAuthorizationCodeUseService.GetAuthorizationCodeByCode(authorizationCode.Code)
+	_, err := a.getClientService.GetClientByID(client.ClientByID{
+		ClientID: authorizationCode.ClientID,
+	})
 	if err != nil {
+		log.WithFields(log.Fields{
+			"client_id":    authorizationCode.ClientID,
+			"grant_type":   authorizationCode.GrantType,
+			"redirect_uri": authorizationCode.RedirectURI,
+		}).
+			WithError(err).
+			Error("Get client by ID error")
 		return AuthorizationCodeResponse{}, err
 	}
-	if codeSession.IsExpired() {
-		return AuthorizationCodeResponse{}, errors.New("authorization session code is expired")
+	// TODO: Validate scopes
+	_, err = a.getAuthorizationCodeUseService.GetAuthorizationCodeByCode(authorization.AuthorizationCodeGrantRequest{
+		ClientID:    authorizationCode.ClientID,
+		Code:        authorizationCode.Code,
+		RedirectURI: authorizationCode.RedirectURI,
+	})
+	if err != nil {
+		log.WithFields(log.Fields{
+			"client_id":    authorizationCode.ClientID,
+			"redirect_uri": authorizationCode.RedirectURI,
+		}).
+			WithError(err).
+			Error("Get authorization code by code error")
+		return AuthorizationCodeResponse{}, err
 	}
-	// FIXME: Create JWT token using AccessToken and RefreshToken entities
+	tokens, err := getTokens(a.createAccessTokenService, a.createRefreshTokenService, authorizationCode.ClientID, a.privateKey)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"client_id":    authorizationCode.ClientID,
+			"redirect_uri": authorizationCode.RedirectURI,
+		}).
+			WithError(err).
+			Error("Get tokens error")
+		return AuthorizationCodeResponse{}, err
+	}
 	grantToken := AuthorizationCodeResponse{
-		AccessToken:  util.NewRandomCode(32),
+		AccessToken:  tokens.AccessToken,
 		TokenType:    string(TokenTypeBearer),
-		ExpiresIn:    a.accessTokenExpirationTimeInSeconds,
-		RefreshToken: util.NewRandomCode(32),
+		ExpiresIn:    tokens.ExpiresIn,
+		RefreshToken: tokens.RefreshToken,
 	}
 	return grantToken, nil
 }
 
 type ImplicitGrantService struct {
-	getClientService                   client.GetClientUseCase
-	accessTokenExpirationTimeInSeconds int
+	getClientService         client.GetClientUseCase
+	createAccessTokenUseCase CreateAccessTokenUseCase
+	privateKey               []byte
 }
 
-func NewImplicitGrantService(getClientService client.GetClientUseCase, accessTokenExpirationTimeInSeconds int) ImplicitGrantUseCase {
-	return ImplicitGrantService{getClientService: getClientService, accessTokenExpirationTimeInSeconds: accessTokenExpirationTimeInSeconds}
+func NewImplicitGrantService(getClientService client.GetClientUseCase, createAccessTokenUseCase CreateAccessTokenService, privateKey []byte) ImplicitGrantUseCase {
+	return ImplicitGrantService{
+		getClientService:         getClientService,
+		createAccessTokenUseCase: createAccessTokenUseCase,
+		privateKey:               privateKey,
+	}
 }
 
 func (i ImplicitGrantService) AuthorizeImplicitWithUserAgentParams(implicit ImplicitUserAgentRequest) (ImplicitUserAgentResponse, error) {
-	// FIXME: Add logs
+	log.WithFields(log.Fields{
+		"client_id":     implicit.ClientID,
+		"redirect_uri":  implicit.RedirectURI,
+		"response_type": implicit.ResponseType,
+		"scope":         implicit.Scope,
+	}).Info("Authorize implicit with user agent")
 	if implicit.ResponseType != string(ResponseTypeToken) {
-		return ImplicitUserAgentResponse{}, errors.New("invalid response type")
+		return ImplicitUserAgentResponse{}, ErrInvalidResponseType
 	}
-	// FIXME: Validate scopes
+	// TODO: Validate scopes
 	client, err := i.getClientService.GetClientByID(client.ClientByID{
 		ClientID: implicit.ClientID,
 	})
+
 	if err != nil {
 		return ImplicitUserAgentResponse{}, err
 	}
-	// FIXME: Validate redirect URI
 
 	if !existsRedirectURI(implicit.RedirectURI, client.RedirectURIs) {
 		return ImplicitUserAgentResponse{}, ErrRedirectURINotFound
@@ -113,14 +245,34 @@ func (i ImplicitGrantService) AuthorizeImplicitWithUserAgentParams(implicit Impl
 	if err != nil {
 		return ImplicitUserAgentResponse{}, err
 	}
-	if implicit.ResponseType != "token" {
+
+	if implicit.ResponseType != string(ResponseTypeToken) {
 		return ImplicitUserAgentResponse{}, errors.New("invalid response type")
 	}
-	// FIXME: Create JWT token using AccessToken and RefreshToken entities
+	accessToken, err := i.createAccessTokenUseCase.NewAccessToken(implicit.ClientID)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"client_id":    implicit.ClientID,
+			"redirect_uri": implicit.RedirectURI,
+		}).
+			WithError(err).
+			Error("Create access token error")
+		return ImplicitUserAgentResponse{}, err
+	}
+	accessTokenString, err := getAccessTokenString(accessToken, i.privateKey)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"client_id":    implicit.ClientID,
+			"redirect_uri": implicit.RedirectURI,
+		}).
+			WithError(err).
+			Error("Create access token error")
+		return ImplicitUserAgentResponse{}, err
+	}
 	return ImplicitUserAgentResponse{
-		AccessToken: util.NewRandomCode(32),
+		AccessToken: accessTokenString,
 		TokenType:   string(TokenTypeBearer),
-		ExpiresIn:   i.accessTokenExpirationTimeInSeconds,
+		ExpiresIn:   accessToken.GetExpirationTimeInSeconds(),
 		RedirectURI: implicit.RedirectURI,
 	}, nil
 }
@@ -128,52 +280,132 @@ func (i ImplicitGrantService) AuthorizeImplicitWithUserAgentParams(implicit Impl
 type PasswordCredentialsGrantService struct {
 	getClientService                   client.GetClientUseCase
 	accessTokenExpirationTimeInSeconds int
+	authenticateClientUseCase          client.AuthenticateClientUseCase
+	createAccessTokenUseCase           CreateAccessTokenUseCase
+	createRefreshTokenUseCase          CreateRefreshTokenUseCase
+	privateKey                         []byte
 }
 
-func NewPasswordCredentialsGrantService(getClientService client.GetClientUseCase, accessTokenExpirationTimeInSeconds int) PasswordCredentialsGrantUseCase {
-	return PasswordCredentialsGrantService{getClientService: getClientService, accessTokenExpirationTimeInSeconds: accessTokenExpirationTimeInSeconds}
+func NewPasswordCredentialsGrantService(getClientService client.GetClientUseCase, authenticateClientUseCase client.AuthenticateClientUseCase, accessTokenExpirationTimeInSeconds int, createAccessTokenUseCase CreateAccessTokenUseCase, privateKey []byte, createRefreshTokenUseCase CreateRefreshTokenUseCase) PasswordCredentialsGrantUseCase {
+	return PasswordCredentialsGrantService{
+		getClientService:                   getClientService,
+		accessTokenExpirationTimeInSeconds: accessTokenExpirationTimeInSeconds,
+		authenticateClientUseCase:          authenticateClientUseCase,
+		createAccessTokenUseCase:           createAccessTokenUseCase,
+		privateKey:                         privateKey,
+		createRefreshTokenUseCase:          createRefreshTokenUseCase}
 }
 
 func (p PasswordCredentialsGrantService) AuthorizeWithPasswordCredentials(resourceOwnerPasswordCredentials ResourceOwnerPasswordCredentialsRequest) (ResourceOwnerPasswordCredentialsResponse, error) {
-	// FIXME: Add logs
-	// FIXME: Validate client credentials
-	// FIXME: Validate user credentials
+	log.WithFields(log.Fields{
+		"client_id":  resourceOwnerPasswordCredentials.ClientID,
+		"grant_type": resourceOwnerPasswordCredentials.GrantType,
+		"username":   resourceOwnerPasswordCredentials.Username,
+		"scope":      resourceOwnerPasswordCredentials.Scope,
+	}).Info("Authorize with password credentials")
+
+	_, err := p.authenticateClientUseCase.AuthenticateClient(client.ClientAuthentication{
+		ClientID:     resourceOwnerPasswordCredentials.ClientID,
+		ClientSecret: resourceOwnerPasswordCredentials.ClientSecret,
+	})
+	if err != nil {
+		log.WithFields(log.Fields{
+			"client_id":  resourceOwnerPasswordCredentials.ClientID,
+			"grant_type": resourceOwnerPasswordCredentials.GrantType,
+			"username":   resourceOwnerPasswordCredentials.Username,
+			"scope":      resourceOwnerPasswordCredentials.Scope,
+		}).
+			WithError(err).
+			Error("Get client by ID error")
+		return ResourceOwnerPasswordCredentialsResponse{}, err
+	}
+
 	if resourceOwnerPasswordCredentials.GrantType != string(GrantTypePassword) {
 		return ResourceOwnerPasswordCredentialsResponse{}, errors.New("invalid grant type")
 	}
 	// FIXME: Validate scopes
-	// FIXME: Generate tokens
+	tokens, err := getTokens(p.createAccessTokenUseCase, p.createRefreshTokenUseCase, resourceOwnerPasswordCredentials.ClientID, p.privateKey)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"client_id": resourceOwnerPasswordCredentials.ClientID,
+		}).
+			WithError(err).
+			Error("Get tokens error")
+		return ResourceOwnerPasswordCredentialsResponse{}, err
+	}
 	return ResourceOwnerPasswordCredentialsResponse{
-		AccessToken:  util.NewRandomCode(32),
+		AccessToken:  tokens.AccessToken,
 		TokenType:    string(TokenTypeBearer),
-		ExpiresIn:    p.accessTokenExpirationTimeInSeconds,
-		RefreshToken: util.NewRandomCode(32),
+		ExpiresIn:    tokens.ExpiresIn,
+		RefreshToken: tokens.AccessToken,
 		Scope:        resourceOwnerPasswordCredentials.Scope,
 	}, nil
 }
 
 type ClientCredentialsGrantService struct {
-	getClientService                   client.GetClientUseCase
-	accessTokenExpirationTimeInSeconds int
+	authenticateClientUseCase client.AuthenticateClientUseCase
+	createAccessTokenUseCase  CreateAccessTokenUseCase
+	createRefreshTokenUseCase CreateRefreshTokenUseCase
+	privateKey                []byte
 }
 
-func NewClientCredentialsGrantService(getClientService client.GetClientUseCase, accessTokenExpirationTimeInSeconds int) ClientCredentialsGrantUseCase {
-	return ClientCredentialsGrantService{getClientService: getClientService, accessTokenExpirationTimeInSeconds: accessTokenExpirationTimeInSeconds}
+func NewClientCredentialsGrantService(authenticateClientUseCase client.AuthenticateClientUseCase, createAccessTokenUseCase CreateAccessTokenUseCase, createRefreshTokenUseCase CreateRefreshTokenUseCase, privateKey []byte) ClientCredentialsGrantUseCase {
+	return ClientCredentialsGrantService{
+		authenticateClientUseCase: authenticateClientUseCase,
+		createAccessTokenUseCase:  createAccessTokenUseCase,
+		createRefreshTokenUseCase: createRefreshTokenUseCase,
+		privateKey:                privateKey,
+	}
 }
 
 func (c ClientCredentialsGrantService) AuthorizeWithClientCredentials(clientCredentials ClientCredentialsRequest) (ClientCredentialsResponse, error) {
 	// FIXME: Add logs
-	// FIXME: Validate client credentials
+	log.
+		WithFields(
+			log.Fields{
+				"client_id":  clientCredentials.ClientID,
+				"grant_type": clientCredentials.GrantType,
+				"scope":      clientCredentials.Scope,
+			},
+		).
+		Info("Authorize with client credentials")
 	if clientCredentials.GrantType != string(GrantTypeClientCredentialsRequest) {
 		return ClientCredentialsResponse{}, errors.New("invalid grant type")
 	}
+	_, err := c.authenticateClientUseCase.AuthenticateClient(client.ClientAuthentication{
+		ClientID:     clientCredentials.ClientID,
+		ClientSecret: clientCredentials.ClientSecret,
+	})
+	if err != nil {
+		log.WithFields(
+			log.Fields{
+				"client_id":  clientCredentials.ClientID,
+				"grant_type": clientCredentials.GrantType,
+				"scope":      clientCredentials.Scope,
+			},
+		).
+			WithError(err).
+			Error("Authentication error")
+		return ClientCredentialsResponse{}, err
+	}
+
 	// FIXME: Validate scopes
-	// FIXME: Generate tokens
+	tokens, err := getTokens(c.createAccessTokenUseCase, c.createRefreshTokenUseCase, clientCredentials.ClientID, c.privateKey)
+	if err != nil {
+		log.WithFields(
+			log.Fields{
+				"client_id": clientCredentials.ClientID,
+			},
+		).
+			WithError(err).
+			Error("Get tokens error")
+		return ClientCredentialsResponse{}, err
+	}
 	return ClientCredentialsResponse{
-		AccessToken:  util.NewRandomCode(32),
+		AccessToken:  tokens.AccessToken,
 		TokenType:    string(TokenTypeBearer),
-		ExpiresIn:    c.accessTokenExpirationTimeInSeconds,
-		RefreshToken: util.NewRandomCode(32),
+		ExpiresIn:    tokens.ExpiresIn,
+		RefreshToken: tokens.RefreshToken,
 		Scope:        clientCredentials.Scope,
 	}, nil
 }
@@ -185,4 +417,44 @@ func existsRedirectURI(redirectURI string, redirectURIs []string) bool {
 		}
 	}
 	return false
+}
+
+type CreateAccessTokenService struct {
+	accessTokenRepository               AccessTokenRepository
+	issuer                              string
+	subject                             string
+	refreshTokenExpirationTimeInSeconds int
+}
+
+func NewCreateAccessTokenService(accessTokenRepository AccessTokenRepository, issuer string, subject string, refreshTokenExpirationTimeInSeconds int) CreateAccessTokenUseCase {
+	return CreateAccessTokenService{accessTokenRepository: accessTokenRepository, issuer: issuer, subject: subject, refreshTokenExpirationTimeInSeconds: refreshTokenExpirationTimeInSeconds}
+}
+
+func (c CreateAccessTokenService) NewAccessToken(clientID string) (AccessToken, error) {
+	accessToken := NewAccessToken(ulid.New(), c.issuer, c.subject, clientID, time.Now().Add(time.Second*time.Duration(c.refreshTokenExpirationTimeInSeconds)))
+	_, err := c.accessTokenRepository.CreateAccessToken(accessToken)
+	if err != nil {
+		return AccessToken{}, err
+	}
+	return accessToken, nil
+}
+
+type CreateRefreshTokenService struct {
+	refreshTokenRepository              RefreshTokenRepository
+	issuer                              string
+	subject                             string
+	refreshTokenExpirationTimeInSeconds int
+}
+
+func NewCreateRefreshTokenService(refreshTokenRepository RefreshTokenRepository, issuer string, subject string, refreshTokenExpirationTimeInSeconds int) CreateRefreshTokenUseCase {
+	return CreateRefreshTokenService{refreshTokenRepository: refreshTokenRepository, issuer: issuer, subject: subject, refreshTokenExpirationTimeInSeconds: refreshTokenExpirationTimeInSeconds}
+}
+
+func (c CreateRefreshTokenService) NewRefreshToken(clientID string) (RefreshToken, error) {
+	refreshToken := NewRefreshToken(ulid.New(), c.issuer, c.subject, clientID, time.Now().Add(time.Second*time.Duration(c.refreshTokenExpirationTimeInSeconds)))
+	_, err := c.refreshTokenRepository.CreateRefreshToken(refreshToken)
+	if err != nil {
+		return RefreshToken{}, err
+	}
+	return refreshToken, nil
 }

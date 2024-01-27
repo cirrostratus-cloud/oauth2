@@ -7,3 +7,11 @@ type AccessTokenRepository interface {
 	CreateAccessToken(accessToken AccessToken) (AccessToken, error)
 	DeleteAccessToken(accessToken AccessToken) error
 }
+
+type RefreshTokenRepository interface {
+	FindRefreshTokenByID(id string) (RefreshToken, error)
+	FindRefreshTokenByClientID(clientID string) ([]RefreshToken, error)
+	FindRefreshTokenByUserID(userID string) ([]RefreshToken, error)
+	CreateRefreshToken(refreshToken RefreshToken) (RefreshToken, error)
+	DeleteRefreshToken(refreshToken RefreshToken) error
+}

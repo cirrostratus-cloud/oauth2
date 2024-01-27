@@ -1,5 +1,7 @@
 package grant
 
+import "github.com/cirrostratus-cloud/oauth2/user"
+
 type AuthorizationUserAgentUseCase interface {
 	AuthorizeWithUserAgentParams(authorizationCodeUserAgentRequest AuthorizationCodeUserAgentRequest) (AuthorizationCodeUserAgentResponse, error)
 }
@@ -21,13 +23,17 @@ type ClientCredentialsGrantUseCase interface {
 }
 
 type CreateAccessTokenUseCase interface {
-	NewAccessToken(clientID string, userID string, scope string) (AccessToken, error)
+	NewAccessToken(clientID string) (AccessToken, error)
 }
 
 type CreateRefreshTokenUseCase interface {
-	NewRefreshToken(clientID string, userID string, scope string) (RefreshToken, error)
+	NewRefreshToken(clientID string) (RefreshToken, error)
 }
 
 type RefreshAccessTokenUseCase interface {
 	RefreshAccessToken(refreshToken string) (AccessTokenResponse, error)
+}
+
+type GetAdditionalDataUseCase interface {
+	GetAdditionalData(user.User) (map[string]interface{}, error)
 }
