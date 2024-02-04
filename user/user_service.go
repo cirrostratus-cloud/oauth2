@@ -41,8 +41,7 @@ func (service *CreateUserService) NewUser(createUserRequest CreateUserRequest) (
 
 	_, err := service.userRepository.GetUserByEmail(createUserRequest.Email)
 
-	if err == nil {
-		// FIXME: This error must be throwed from repository
+	if err != nil {
 		return CreateUserResponse{}, ErrUserAlreadyExists
 	}
 
