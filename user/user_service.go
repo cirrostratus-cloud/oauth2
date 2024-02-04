@@ -10,7 +10,6 @@ import (
 )
 
 var ErrUserIDEmpty = errors.New("user ID is empty")
-var ErrUserAlreadyExists = errors.New("user already exists")
 
 type CreateUserService struct {
 	userRepository    UserRepository
@@ -39,9 +38,18 @@ func (service *CreateUserService) NewUser(createUserRequest CreateUserRequest) (
 		},
 	).Info("Creating new user")
 
-	_, err := service.userRepository.GetUserByEmail(createUserRequest.Email)
+	exists, err := service.userRepository.ExistUserByEmail(createUserRequest.Email)
 
 	if err != nil {
+		return CreateUserResponse{}, err
+	}
+
+	if exists {
+		log.WithFields(
+			log.Fields{
+				"email": createUserRequest.Email,
+			},
+		).Error("User already exists")
 		return CreateUserResponse{}, ErrUserAlreadyExists
 	}
 

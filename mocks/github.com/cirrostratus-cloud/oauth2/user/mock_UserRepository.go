@@ -72,6 +72,58 @@ func (_c *MockUserRepository_CreateUser_Call) RunAndReturn(run func(user.User) (
 	return _c
 }
 
+// ExistUserByEmail provides a mock function with given fields: email
+func (_m *MockUserRepository) ExistUserByEmail(email string) (bool, error) {
+	ret := _m.Called(email)
+
+	var r0 bool
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string) (bool, error)); ok {
+		return rf(email)
+	}
+	if rf, ok := ret.Get(0).(func(string) bool); ok {
+		r0 = rf(email)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	if rf, ok := ret.Get(1).(func(string) error); ok {
+		r1 = rf(email)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockUserRepository_ExistUserByEmail_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ExistUserByEmail'
+type MockUserRepository_ExistUserByEmail_Call struct {
+	*mock.Call
+}
+
+// ExistUserByEmail is a helper method to define mock.On call
+//   - email string
+func (_e *MockUserRepository_Expecter) ExistUserByEmail(email interface{}) *MockUserRepository_ExistUserByEmail_Call {
+	return &MockUserRepository_ExistUserByEmail_Call{Call: _e.mock.On("ExistUserByEmail", email)}
+}
+
+func (_c *MockUserRepository_ExistUserByEmail_Call) Run(run func(email string)) *MockUserRepository_ExistUserByEmail_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *MockUserRepository_ExistUserByEmail_Call) Return(_a0 bool, _a1 error) *MockUserRepository_ExistUserByEmail_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockUserRepository_ExistUserByEmail_Call) RunAndReturn(run func(string) (bool, error)) *MockUserRepository_ExistUserByEmail_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetUserByEmail provides a mock function with given fields: email
 func (_m *MockUserRepository) GetUserByEmail(email string) (user.User, error) {
 	ret := _m.Called(email)

@@ -16,8 +16,8 @@ func TestCreateUser(t *testing.T) {
 	userRepository := muser.NewMockUserRepository(t)
 	userRepository.
 		EXPECT().
-		GetUserByEmail(mock.AnythingOfType("string")).
-		Return(user.User{}, errors.New("user not found")).
+		ExistUserByEmail(mock.AnythingOfType("string")).
+		Return(false, nil).
 		Times(1)
 	userRepository.
 		On("CreateUser", mock.AnythingOfType("user.User")).
@@ -49,8 +49,8 @@ func TestCreateUserWithInvalidEmail(t *testing.T) {
 	userRepository := muser.NewMockUserRepository(t)
 	userRepository.
 		EXPECT().
-		GetUserByEmail(mock.AnythingOfType("string")).
-		Return(user.User{}, errors.New("user not found")).
+		ExistUserByEmail(mock.AnythingOfType("string")).
+		Return(false, nil).
 		Times(1)
 	createUserService := user.NewCreateUserService(
 		userRepository,
@@ -76,8 +76,8 @@ func TestCreateUserWithInvalidPassword(t *testing.T) {
 	userRepository := muser.NewMockUserRepository(t)
 	userRepository.
 		EXPECT().
-		GetUserByEmail(mock.AnythingOfType("string")).
-		Return(user.User{}, errors.New("user not found")).
+		ExistUserByEmail(mock.AnythingOfType("string")).
+		Return(false, nil).
 		Times(1)
 	createUserService := user.NewCreateUserService(
 		userRepository,
@@ -103,8 +103,8 @@ func TestCreateUserWithInvalidPasswordLength(t *testing.T) {
 	userRepository := muser.NewMockUserRepository(t)
 	userRepository.
 		EXPECT().
-		GetUserByEmail(mock.AnythingOfType("string")).
-		Return(user.User{}, errors.New("user not found")).
+		ExistUserByEmail(mock.AnythingOfType("string")).
+		Return(false, nil).
 		Times(1)
 	createUserService := user.NewCreateUserService(
 		userRepository,
@@ -129,15 +129,9 @@ func TestCreateUserEmailAlreadyExists(t *testing.T) {
 	assert := assert.New(t)
 	userRepository := muser.NewMockUserRepository(t)
 	userRepository.
-		On("GetUserByEmail", mock.AnythingOfType("string")).
-		Return(func(email string) (user.User, error) {
-			password, err := bcrypt.GenerateFromPassword([]byte("S0m3P@ssword"), bcrypt.DefaultCost)
-			if err != nil {
-				return user.User{}, err
-			}
-			u, err := user.NewUser("someuserid", email, string(password))
-			return u, err
-		}).
+		EXPECT().
+		ExistUserByEmail(mock.AnythingOfType("string")).
+		Return(true, nil).
 		Times(1)
 	createUserService := user.NewCreateUserService(
 		userRepository,
