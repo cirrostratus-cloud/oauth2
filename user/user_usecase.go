@@ -50,3 +50,7 @@ type ValidatePasswordUseCase interface {
 type RequestPasswordRecoveryUseCase interface {
 	RequestPasswordRecovery(requestPasswordRecoveryRequest RequestPasswordRecoveryRequest) (RequestPasswordRecoveryResponse, error)
 }
+
+type DeleteUserUseCase interface {
+	DeleteUser(deleteUserRequest DeleteUserRequest) (DeleteUserResponse, error)
+}

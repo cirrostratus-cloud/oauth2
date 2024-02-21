@@ -877,3 +877,26 @@ func (service *NotifyPasswordRecoveredService) NotifyPasswordRecovered(notifyPas
 	}
 	return nil
 }
+
+type DeleteUserService struct {
+	userRepository UserRepository
+}
+
+func NewDeleteUserService(userRepository UserRepository) DeleteUserUseCase {
+	return &DeleteUserService{
+		userRepository: userRepository,
+	}
+}
+
+func (service *DeleteUserService) DeleteUser(deleteUserRequest DeleteUserRequest) (DeleteUserResponse, error) {
+	err := service.userRepository.DeleteUser(deleteUserRequest.UserID)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"UserID": deleteUserRequest.UserID,
+		}).
+			WithError(err).
+			Error("Error deleting user")
+		return DeleteUserResponse{}, err
+	}
+	return DeleteUserResponse(deleteUserRequest), nil
+}

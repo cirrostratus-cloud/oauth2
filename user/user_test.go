@@ -873,3 +873,35 @@ func TestNotifyPasswordChangedEmailError(t *testing.T) {
 	})
 	assert.NotNil(err)
 }
+
+func TestDeleteUserOk(t *testing.T) {
+	assert := assert.New(t)
+	userRepository := muser.NewMockUserRepository(t)
+	userRepository.
+		On("DeleteUser", mock.AnythingOfType("string")).
+		Return(func(id string) error {
+			return nil
+		}).
+		Times(1)
+	deleteUserService := user.NewDeleteUserService(userRepository)
+	_, err := deleteUserService.DeleteUser(user.DeleteUserRequest{
+		UserID: "someuserid",
+	})
+	assert.Nil(err)
+}
+
+func TestDeleteUserNotFound(t *testing.T) {
+	assert := assert.New(t)
+	userRepository := muser.NewMockUserRepository(t)
+	userRepository.
+		On("DeleteUser", mock.AnythingOfType("string")).
+		Return(func(id string) error {
+			return errors.New("user not found")
+		}).
+		Times(1)
+	deleteUserService := user.NewDeleteUserService(userRepository)
+	_, err := deleteUserService.DeleteUser(user.DeleteUserRequest{
+		UserID: "someuserid",
+	})
+	assert.NotNil(err)
+}

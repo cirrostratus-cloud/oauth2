@@ -122,3 +122,11 @@ type NotifyPasswordRecoveredRequest struct {
 type NotifyPasswordRecoveredResponse struct {
 	UserID string
 }
+
+type DeleteUserRequest struct {
+	UserID string
+}
+
+type DeleteUserResponse struct {
+	UserID string
+}
