@@ -72,6 +72,48 @@ func (_c *MockUserRepository_CreateUser_Call) RunAndReturn(run func(user.User) (
 	return _c
 }
 
+// DeleteUser provides a mock function with given fields: userID
+func (_m *MockUserRepository) DeleteUser(userID string) error {
+	ret := _m.Called(userID)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string) error); ok {
+		r0 = rf(userID)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockUserRepository_DeleteUser_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteUser'
+type MockUserRepository_DeleteUser_Call struct {
+	*mock.Call
+}
+
+// DeleteUser is a helper method to define mock.On call
+//   - userID string
+func (_e *MockUserRepository_Expecter) DeleteUser(userID interface{}) *MockUserRepository_DeleteUser_Call {
+	return &MockUserRepository_DeleteUser_Call{Call: _e.mock.On("DeleteUser", userID)}
+}
+
+func (_c *MockUserRepository_DeleteUser_Call) Run(run func(userID string)) *MockUserRepository_DeleteUser_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *MockUserRepository_DeleteUser_Call) Return(_a0 error) *MockUserRepository_DeleteUser_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockUserRepository_DeleteUser_Call) RunAndReturn(run func(string) error) *MockUserRepository_DeleteUser_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ExistUserByEmail provides a mock function with given fields: email
 func (_m *MockUserRepository) ExistUserByEmail(email string) (bool, error) {
 	ret := _m.Called(email)

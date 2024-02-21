@@ -7,15 +7,15 @@ import (
 )
 
 var ErrEmailInvalid = errors.New("email is invalid")
-var ErrPasswordInvalid = errors.New("password is invalid")
 
 type User struct {
-	id        string
-	email     string
-	password  string
-	firstName string
-	lastName  string
-	enabled   bool
+	id             string
+	email          string
+	password       string
+	firstName      string
+	lastName       string
+	enabled        bool
+	changePassword bool
 }
 
 func (u User) GetID() string {
@@ -36,6 +36,15 @@ func (u User) GetFullName() string {
 
 func (u User) GetEmail() string {
 	return u.email
+}
+
+func (u *User) ChangePassword(password string) {
+	u.password = password
+	u.changePassword = false
+}
+
+func (u User) IsChangePassword() bool {
+	return u.changePassword
 }
 
 func (u User) GetPassword() string {
@@ -72,5 +81,5 @@ func NewUser(id string, email string, password string) (User, error) {
 		return User{}, ErrPasswordInvalid
 	}
 
-	return User{id: id, email: email, password: password, enabled: true}, nil
+	return User{id: id, email: email, password: password, enabled: true, changePassword: true}, nil
 }

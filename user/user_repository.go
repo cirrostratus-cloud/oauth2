@@ -12,4 +12,5 @@ type UserRepository interface {
 	UpdateUser(user User) (User, error)
 	GetUserByEmail(email string) (User, error)
 	ExistUserByEmail(email string) (bool, error)
+	DeleteUser(userID string) error
 }

@@ -6,6 +6,9 @@ packages:
   github.com/cirrostratus-cloud/common/event:
     interfaces:
       EventBus:
+  github.com/cirrostratus-cloud/common/email:
+    interfaces:
+      EmailService:
   github.com/cirrostratus-cloud/oauth2/user:
     interfaces:
       UserRepository:

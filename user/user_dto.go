@@ -6,7 +6,6 @@ type UserByID struct {
 
 type CreateUserRequest struct {
 	Email     string
-	Password  string
 	FirstName string
 	LastName  string
 }
@@ -54,4 +53,72 @@ type AuthenticateUserResponse struct {
 	FirstName string
 	LastName  string
 	Enabled   bool
+}
+
+type ChangePasswordRequest struct {
+	Email               string
+	OldPassword         string
+	NewPassword         string
+	NewPasswordRepeated string
+}
+
+type ChangePasswordResponse struct {
+	UserID string
+}
+
+type NotifyPasswordChangedRequest struct {
+	UserID string
+}
+
+type RequestPasswordRecoveryRequest struct {
+	Email string
+}
+
+type RequestPasswordRecoveryResponse struct {
+	UserID string
+}
+
+type NotifyPasswordChangedResponse struct {
+	UserID string
+}
+
+type RecoverPasswordRequest struct {
+	Email               string
+	NewPassword         string
+	NewPasswordRepeated string
+	ValidationToken     string
+}
+
+type RecoverPasswordResponse struct {
+	UserID string
+}
+
+type ValidateChangePasswordTokenRequest struct {
+	Token string
+}
+
+type ValidateChangePasswordTokenResponse struct {
+	UserID string
+}
+
+type ValidatePasswordRequest struct {
+	Email    string
+	Password string
+}
+
+type ValidatePasswordResponse struct {
+	Valid bool
+}
+
+type NotifyUserCreatedRequest struct {
+	UserID      string
+	RawPassword string
+}
+
+type NotifyPasswordRecoveredRequest struct {
+	UserID string
+}
+
+type NotifyPasswordRecoveredResponse struct {
+	UserID string
 }
