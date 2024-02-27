@@ -95,7 +95,8 @@ func (service *CreateUserService) NewUser(createUserRequest CreateUserRequest) (
 		return CreateUserResponse{}, err
 	}
 	err = service.eventBus.Publish(oauth2_event.UserCreatedEventName, oauth2_event.UserCreatedEvent{
-		UserID: user.GetID(),
+		UserID:      user.GetID(),
+		RawPassword: generatedPassword,
 	})
 	if err != nil {
 		log.WithFields(
