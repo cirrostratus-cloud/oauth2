@@ -4,19 +4,18 @@ import "github.com/cirrostratus-cloud/common/event"
 
 const (
 	UserCreatedEventName           event.EventName = "user/created"
+	UserEmailConfirmedEventName    event.EventName = "user/email_confirmed"
 	UserPasswordChangedEventName   event.EventName = "user/password_changed"
 	UserPasswordRecoveredEventName event.EventName = "user/password_recovered"
 )
 
 type UserCreatedEvent struct {
-	UserID      string
-	RawPassword string
+	UserID string
 }
 
 func (e UserCreatedEvent) GetPayload() map[string]interface{} {
 	return map[string]interface{}{
-		"userID":      e.UserID,
-		"rawPassword": e.RawPassword,
+		"userID": e.UserID,
 	}
 }
 
@@ -43,6 +42,16 @@ type UserPasswordRecoveredEvent struct {
 }
 
 func (e UserPasswordRecoveredEvent) GetPayload() map[string]interface{} {
+	return map[string]interface{}{
+		"userID": e.UserID,
+	}
+}
+
+type UserEmailConfirmedEvent struct {
+	UserID string
+}
+
+func (e UserEmailConfirmedEvent) GetPayload() map[string]interface{} {
 	return map[string]interface{}{
 		"userID": e.UserID,
 	}
