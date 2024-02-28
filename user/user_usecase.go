@@ -54,3 +54,11 @@ type RequestPasswordRecoveryUseCase interface {
 type DeleteUserUseCase interface {
 	DeleteUser(deleteUserRequest DeleteUserRequest) (DeleteUserResponse, error)
 }
+
+type NotifyEmailConfirmationUseCase interface {
+	NotifyEmailConfirmation(notifyEmailConfirmation NotifyEmailConfirmationRequest) error
+}
+
+type ConfirmateEmailUseCase interface {
+	ConfirmateEmail(confirmateEmailRequest ConfirmateEmailRequest) (ConfirmateEmailResponse, error)
+}

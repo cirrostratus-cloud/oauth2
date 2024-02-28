@@ -81,5 +81,5 @@ func NewUser(id string, email string, password string) (User, error) {
 		return User{}, ErrPasswordInvalid
 	}
 
-	return User{id: id, email: email, password: password, enabled: true, changePassword: true}, nil
+	return User{id: id, email: email, password: password, enabled: false, changePassword: false}, nil
 }

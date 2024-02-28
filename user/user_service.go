@@ -20,24 +20,16 @@ var ErrPasswordInvalid = errors.New("password is invalid")
 var ErrUserIDMismatch = errors.New("user ID mismatch")
 
 type CreateUserService struct {
-	userRepository    UserRepository
-	eventBus          event.EventBus
-	minPasswordLen    int
-	uppercaseRequired bool
-	lowercaseRequired bool
-	numbersRequired   bool
-	specialRequired   bool
+	userRepository          UserRepository
+	eventBus                event.EventBus
+	validatePasswordUseCase ValidatePasswordUseCase
 }
 
-func NewCreateUserService(userRepository UserRepository, minPasswordLen int, uppercaseRequired bool, lowercaseRequired bool, numberRequired bool, specialRequired bool, eventBus event.EventBus) CreateUserUseCase {
+func NewCreateUserService(userRepository UserRepository, eventBus event.EventBus, validatePasswordUseCase ValidatePasswordUseCase) CreateUserUseCase {
 	return &CreateUserService{
-		userRepository:    userRepository,
-		minPasswordLen:    minPasswordLen,
-		uppercaseRequired: uppercaseRequired,
-		lowercaseRequired: lowercaseRequired,
-		numbersRequired:   numberRequired,
-		specialRequired:   specialRequired,
-		eventBus:          eventBus,
+		userRepository:          userRepository,
+		eventBus:                eventBus,
+		validatePasswordUseCase: validatePasswordUseCase,
 	}
 }
 
@@ -62,8 +54,32 @@ func (service *CreateUserService) NewUser(createUserRequest CreateUserRequest) (
 		).Error("User already exists")
 		return CreateUserResponse{}, ErrUserAlreadyExists
 	}
-	generatedPassword := util.GeneratePassword(service.minPasswordLen, service.uppercaseRequired, service.lowercaseRequired, service.numbersRequired, service.specialRequired)
-	password, err := bcrypt.GenerateFromPassword(util.FromStringToByteArray(generatedPassword), bcrypt.DefaultCost)
+
+	if createUserRequest.Password != createUserRequest.PasswordRepeated {
+		log.WithFields(
+			log.Fields{
+				"email": createUserRequest.Email,
+			},
+		).Error("Passwords do not match")
+		return CreateUserResponse{}, ErrPasswordMismatch
+	}
+
+	_, err = service.validatePasswordUseCase.ValidatePassword(ValidatePasswordRequest{
+		Email:    createUserRequest.Email,
+		Password: createUserRequest.Password,
+	})
+
+	if err != nil {
+		log.WithFields(
+			log.Fields{
+				"email": createUserRequest.Email,
+			},
+		).WithError(err).
+			Error("Error validating password")
+		return CreateUserResponse{}, err
+	}
+
+	password, err := bcrypt.GenerateFromPassword(util.FromStringToByteArray(createUserRequest.Password), bcrypt.DefaultCost)
 	if err != nil {
 		log.WithFields(
 			log.Fields{
@@ -95,8 +111,7 @@ func (service *CreateUserService) NewUser(createUserRequest CreateUserRequest) (
 		return CreateUserResponse{}, err
 	}
 	err = service.eventBus.Publish(oauth2_event.UserCreatedEventName, oauth2_event.UserCreatedEvent{
-		UserID:      user.GetID(),
-		RawPassword: generatedPassword,
+		UserID: user.GetID(),
 	})
 	if err != nil {
 		log.WithFields(
@@ -312,15 +327,14 @@ func NewNotifyUserCreatedService(userRepository UserRepository, emailService ema
 		emailService:   emailService,
 		emailFrom:      emailFrom,
 	}
-	eventBus.Subscribe(oauth2_event.UserCreatedEventName, func(e event.Event) error {
-		userCreatedEvent := e.(oauth2_event.UserCreatedEvent)
+	eventBus.Subscribe(oauth2_event.UserEmailConfirmedEventName, func(e event.Event) error {
+		userEmailConfirmed := e.(oauth2_event.UserEmailConfirmedEvent)
 		err := service.NotifyUserCreated(NotifyUserCreatedRequest{
-			UserID:      userCreatedEvent.UserID,
-			RawPassword: userCreatedEvent.RawPassword,
+			UserID: userEmailConfirmed.UserID,
 		})
 		if err != nil {
 			log.WithFields(log.Fields{
-				"UserID": userCreatedEvent.UserID,
+				"UserID": userEmailConfirmed.UserID,
 			}).
 				WithError(err).
 				Error("Error notifying user created")
@@ -353,7 +367,6 @@ func (service *NotifyUserCreatedService) NotifyUserCreated(notifyUserCreatedRequ
 	html, err := email.CreateEmailHtml(map[string]interface{}{
 		"Title":    "Welcome to the system",
 		"FullName": user.GetFullName(),
-		"Password": notifyUserCreatedRequest.RawPassword,
 	}, util.FromByteArrayToString(bytes))
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -739,7 +752,9 @@ func (service *RecoverPasswordService) RecoverPassword(recoverPasswordRequest Re
 			Error("Error getting user")
 		return RecoverPasswordResponse{}, err
 	}
-	if claims["user_id"] == user.GetID() {
+	additionalData := claims["additional_data"].(map[string]interface{})
+	userID := additionalData["user_id"].(string)
+	if userID == user.GetID() {
 		log.WithFields(log.Fields{
 			"UserID": user.GetID(),
 		}).
@@ -900,4 +915,169 @@ func (service *DeleteUserService) DeleteUser(deleteUserRequest DeleteUserRequest
 		return DeleteUserResponse{}, err
 	}
 	return DeleteUserResponse(deleteUserRequest), nil
+}
+
+type NotifyEmailConfirmationService struct {
+	userRepository       UserRepository
+	emailService         email.EmailService
+	emailFrom            string
+	emailConfirmationURL string
+	privateKey           []byte
+	maxAgeInSeconds      int
+}
+
+func NewNotifyEmailConfirmationService(userRepository UserRepository, emailService email.EmailService, eventBus event.EventBus, emailFrom string, emailConfirmationURL string, privateKey []byte, maxAgeInSeconds int) NotifyEmailConfirmationUseCase {
+	service := &NotifyEmailConfirmationService{
+		userRepository:       userRepository,
+		emailService:         emailService,
+		emailFrom:            emailFrom,
+		emailConfirmationURL: emailConfirmationURL,
+		privateKey:           privateKey,
+		maxAgeInSeconds:      maxAgeInSeconds,
+	}
+	eventBus.Subscribe(oauth2_event.UserCreatedEventName, func(e event.Event) error {
+		userCreatedEvent := e.(oauth2_event.UserCreatedEvent)
+		err := service.NotifyEmailConfirmation(NotifyEmailConfirmationRequest{
+			UserID: userCreatedEvent.UserID,
+		})
+		if err != nil {
+			log.WithFields(log.Fields{
+				"UserID": userCreatedEvent.UserID,
+			}).
+				WithError(err).
+				Error("Error notifying email confirmation")
+		}
+		return err
+	})
+	return service
+}
+
+func (service *NotifyEmailConfirmationService) NotifyEmailConfirmation(notifyEmailConfirmationRequest NotifyEmailConfirmationRequest) error {
+	user, err := service.userRepository.GetUserByID(notifyEmailConfirmationRequest.UserID)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"UserID": notifyEmailConfirmationRequest.UserID,
+		}).
+			WithError(err).
+			Error("Error getting user")
+		return err
+	}
+	bytes, err := os.ReadFile("mail_confirmation.html")
+	if err != nil {
+		log.WithFields(log.Fields{
+			"UserID": notifyEmailConfirmationRequest.UserID,
+		}).
+			WithError(err).
+			Error("Error reading email html")
+		return err
+	}
+	token, err := util.GenerateTokenWithExpiration(time.Now().Add(time.Second*time.Duration(service.maxAgeInSeconds)), map[string]interface{}{
+		"user_id": user.GetID(),
+	}, service.privateKey)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"UserID": notifyEmailConfirmationRequest.UserID,
+		}).
+			WithError(err).
+			Error("Error generating token")
+		return err
+	}
+	html, err := email.CreateEmailHtml(map[string]interface{}{
+		"Title":    "Email confirmation",
+		"FullName": user.GetFullName(),
+		"URL":      service.emailConfirmationURL + "?token=" + token,
+	}, util.FromByteArrayToString(bytes))
+	if err != nil {
+		log.WithFields(log.Fields{
+			"UserID": notifyEmailConfirmationRequest.UserID,
+		}).
+			WithError(err).
+			Error("Error creating email html")
+		return err
+	}
+	err = service.emailService.SendEmail(
+		service.emailFrom,
+		user.GetEmail(),
+		"Email confirmation",
+		html,
+	)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"UserID": notifyEmailConfirmationRequest.UserID,
+		}).
+			WithError(err).
+			Error("Error sending email")
+		return err
+	}
+	return nil
+}
+
+type ConfirmateEmailService struct {
+	userRepository UserRepository
+	eventBus       event.EventBus
+	privateKey     []byte
+}
+
+func NewConfirmateEmailService(userRepository UserRepository, eventBus event.EventBus, privateKey []byte) ConfirmateEmailUseCase {
+	return &ConfirmateEmailService{
+		userRepository: userRepository,
+		eventBus:       eventBus,
+		privateKey:     privateKey,
+	}
+}
+
+func (service *ConfirmateEmailService) ConfirmateEmail(confirmEmailRequest ConfirmateEmailRequest) (ConfirmateEmailResponse, error) {
+	claims, err := util.ValidateToken(confirmEmailRequest.ValidationToken, service.privateKey)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"ValidationToken": confirmEmailRequest.ValidationToken,
+		}).
+			Error("Error validating token")
+		return ConfirmateEmailResponse{}, err
+	}
+	additionalData := claims["additional_data"].(map[string]interface{})
+	userID := additionalData["user_id"].(string)
+	if err != nil {
+		log.
+			WithError(err).
+			Error("Error validating token")
+		return ConfirmateEmailResponse{}, err
+	}
+	user, err := service.userRepository.GetUserByID(userID)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"UserID": userID,
+		}).
+			WithError(err).
+			Error("Error getting user")
+		return ConfirmateEmailResponse{}, err
+	}
+	user.EnableUser()
+	user, err = service.userRepository.UpdateUser(user)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"UserID": userID,
+		}).
+			WithError(err).
+			Error("Error confirming email")
+		return ConfirmateEmailResponse{}, err
+	}
+	err = service.eventBus.Publish(oauth2_event.UserEmailConfirmedEventName, oauth2_event.UserEmailConfirmedEvent{
+		UserID: user.GetID(),
+	})
+
+	if err != nil {
+		log.WithFields(log.Fields{
+			"UserID": user.GetID(),
+		}).
+			WithError(err).
+			Error("Error publishing email confirmed event")
+		user.DisableUser()
+		service.userRepository.UpdateUser(user)
+		return ConfirmateEmailResponse{}, err
+	}
+
+	return ConfirmateEmailResponse{
+		UserID: user.GetID(),
+	}, nil
 }

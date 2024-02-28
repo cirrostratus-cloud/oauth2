@@ -5,9 +5,11 @@ type UserByID struct {
 }
 
 type CreateUserRequest struct {
-	Email     string
-	FirstName string
-	LastName  string
+	Email            string
+	FirstName        string
+	LastName         string
+	Password         string
+	PasswordRepeated string
 }
 
 type CreateUserResponse struct {
@@ -128,5 +130,21 @@ type DeleteUserRequest struct {
 }
 
 type DeleteUserResponse struct {
+	UserID string
+}
+
+type NotifyEmailConfirmationRequest struct {
+	UserID string
+}
+
+type NotifyEmailConfirmationResponse struct {
+	UserID string
+}
+
+type ConfirmateEmailRequest struct {
+	ValidationToken string
+}
+
+type ConfirmateEmailResponse struct {
 	UserID string
 }

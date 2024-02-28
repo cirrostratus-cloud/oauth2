@@ -36,19 +36,18 @@ func TestCreateUser(t *testing.T) {
 			return u, nil
 		}).
 		Times(1)
+	validatePasswordService := user.NewValidatePasswordService(userRepository, true, true, true, true, 8)
 	createUserService := user.NewCreateUserService(
 		userRepository,
-		8,
-		true,
-		true,
-		true,
-		true,
 		eventBus,
+		validatePasswordService,
 	)
 	createUserRequest := user.CreateUserRequest{
-		Email:     "somemail@mail.com",
-		FirstName: "somefirstname",
-		LastName:  "somelastname",
+		Email:            "somemail@mail.com",
+		FirstName:        "somefirstname",
+		LastName:         "somelastname",
+		Password:         "S0m3P@ssword",
+		PasswordRepeated: "S0m3P@ssword",
 	}
 	createUserResponse, err := createUserService.NewUser(createUserRequest)
 	assert.Nil(err)
@@ -64,14 +63,11 @@ func TestCreateUserWithInvalidEmail(t *testing.T) {
 		ExistUserByEmail(mock.AnythingOfType("string")).
 		Return(false, nil).
 		Times(1)
+	validatePasswordService := user.NewValidatePasswordService(userRepository, true, true, true, true, 8)
 	createUserService := user.NewCreateUserService(
 		userRepository,
-		8,
-		true,
-		true,
-		true,
-		true,
 		eventBus,
+		validatePasswordService,
 	)
 	createUserRequest := user.CreateUserRequest{
 		Email:     "somemail",
@@ -92,19 +88,70 @@ func TestCreateUserEmailAlreadyExists(t *testing.T) {
 		ExistUserByEmail(mock.AnythingOfType("string")).
 		Return(true, nil).
 		Times(1)
+	validatePasswordService := user.NewValidatePasswordService(userRepository, true, true, true, true, 8)
 	createUserService := user.NewCreateUserService(
 		userRepository,
-		8,
-		true,
-		true,
-		true,
-		true,
 		eventBus,
+		validatePasswordService,
 	)
 	createUserRequest := user.CreateUserRequest{
 		Email:     "somemail@mail.com",
 		FirstName: "somefirstname",
 		LastName:  "somelastname",
+	}
+	createUserResponse, err := createUserService.NewUser(createUserRequest)
+	assert.NotNil(err)
+	assert.Empty(createUserResponse.UserID)
+}
+
+func TestCreateUserPasswordNotValid(t *testing.T) {
+	assert := assert.New(t)
+	eventBus := mevent.NewMockEventBus(t)
+	userRepository := muser.NewMockUserRepository(t)
+	userRepository.
+		EXPECT().
+		ExistUserByEmail(mock.AnythingOfType("string")).
+		Return(false, nil).
+		Times(1)
+	validatePasswordService := user.NewValidatePasswordService(userRepository, true, true, true, true, 8)
+	createUserService := user.NewCreateUserService(
+		userRepository,
+		eventBus,
+		validatePasswordService,
+	)
+	createUserRequest := user.CreateUserRequest{
+		Email:            "somemail@mail.com",
+		FirstName:        "somefirstname",
+		LastName:         "somelastname",
+		Password:         "somepassword",
+		PasswordRepeated: "somepassword",
+	}
+	createUserResponse, err := createUserService.NewUser(createUserRequest)
+	assert.NotNil(err)
+	assert.Empty(createUserResponse.UserID)
+}
+
+func TestCreateUserPasswordNotMatch(t *testing.T) {
+	assert := assert.New(t)
+	eventBus := mevent.NewMockEventBus(t)
+	userRepository := muser.NewMockUserRepository(t)
+	userRepository.
+		EXPECT().
+		ExistUserByEmail(mock.AnythingOfType("string")).
+		Return(false, nil).
+		Times(1)
+	validatePasswordService := user.NewValidatePasswordService(userRepository, true, true, true, true, 8)
+	createUserService := user.NewCreateUserService(
+		userRepository,
+		eventBus,
+		validatePasswordService,
+	)
+	createUserRequest := user.CreateUserRequest{
+		Email:            "somemail@mail.com",
+		FirstName:        "somefirstname",
+		LastName:         "somelastname",
+		Password:         "S0m3P@ssword",
+		PasswordRepeated: "S0m3P@ssword2",
 	}
 	createUserResponse, err := createUserService.NewUser(createUserRequest)
 	assert.NotNil(err)
@@ -311,7 +358,7 @@ func TestNotifyUserCreatedOk(t *testing.T) {
 	eventBus := mevent.NewMockEventBus(t)
 	eventBus.
 		EXPECT().
-		Subscribe(user_event.UserCreatedEventName, mock.Anything).
+		Subscribe(user_event.UserEmailConfirmedEventName, mock.Anything).
 		Return(nil).
 		Times(1)
 	userRepository := muser.NewMockUserRepository(t)
@@ -345,7 +392,7 @@ func TestNotifyUserCreatedNotFound(t *testing.T) {
 	eventBus := mevent.NewMockEventBus(t)
 	eventBus.
 		EXPECT().
-		Subscribe(user_event.UserCreatedEventName, mock.Anything).
+		Subscribe(user_event.UserEmailConfirmedEventName, mock.Anything).
 		Return(nil).
 		Times(1)
 	userRepository := muser.NewMockUserRepository(t)
@@ -369,7 +416,7 @@ func TestNotifyUserCreatedEmailError(t *testing.T) {
 	eventBus := mevent.NewMockEventBus(t)
 	eventBus.
 		EXPECT().
-		Subscribe(user_event.UserCreatedEventName, mock.Anything).
+		Subscribe(user_event.UserEmailConfirmedEventName, mock.Anything).
 		Return(nil).
 		Times(1)
 	userRepository := muser.NewMockUserRepository(t)
@@ -902,6 +949,160 @@ func TestDeleteUserNotFound(t *testing.T) {
 	deleteUserService := user.NewDeleteUserService(userRepository)
 	_, err := deleteUserService.DeleteUser(user.DeleteUserRequest{
 		UserID: "someuserid",
+	})
+	assert.NotNil(err)
+}
+
+func TestNotifyEmailConfirmationOk(t *testing.T) {
+	assert := assert.New(t)
+	eventBus := mevent.NewMockEventBus(t)
+	eventBus.
+		EXPECT().
+		Subscribe(user_event.UserCreatedEventName, mock.Anything).
+		Return(nil).
+		Times(1)
+	userRepository := muser.NewMockUserRepository(t)
+	userRepository.
+		On("GetUserByID", mock.AnythingOfType("string")).
+		Return(func(id string) (user.User, error) {
+			password, err := bcrypt.GenerateFromPassword([]byte("somepassword"), bcrypt.DefaultCost)
+			if err != nil {
+				return user.User{}, err
+			}
+			u, err := user.NewUser(id, "somemail@mail.com", string(password))
+			return u, err
+		}).
+		Times(1)
+	emailService := email.NewMockEmailService(t)
+	emailService.
+		EXPECT().
+		SendEmail(mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("string")).
+		Return(nil).
+		Times(1)
+	notifyEmailConfirmationService := user.NewNotifyEmailConfirmationService(userRepository, emailService, eventBus, "cirrostratus-cloud@cloud.com", "https://example.com/confirm", util.FromStringToByteArray("somekey"), 3600)
+	err := notifyEmailConfirmationService.NotifyEmailConfirmation(user.NotifyEmailConfirmationRequest{
+		UserID: "someuserid",
+	})
+	assert.Nil(err)
+}
+
+func TestNotifyEmailConfirmationUserNotFound(t *testing.T) {
+	assert := assert.New(t)
+	eventBus := mevent.NewMockEventBus(t)
+	eventBus.
+		EXPECT().
+		Subscribe(user_event.UserCreatedEventName, mock.Anything).
+		Return(nil).
+		Times(1)
+	userRepository := muser.NewMockUserRepository(t)
+	userRepository.
+		On("GetUserByID", mock.AnythingOfType("string")).
+		Return(func(id string) (user.User, error) {
+			return user.User{}, errors.New("user not found")
+		}).
+		Times(1)
+	emailService := email.NewMockEmailService(t)
+	notifyEmailConfirmationService := user.NewNotifyEmailConfirmationService(userRepository, emailService, eventBus, "cirrostratus-cloud@cloud.com", "https://example.com/confirm", util.FromStringToByteArray("somekey"), 3600)
+	err := notifyEmailConfirmationService.NotifyEmailConfirmation(user.NotifyEmailConfirmationRequest{
+		UserID: "someuserid",
+	})
+	assert.NotNil(err)
+}
+
+func TestNotifyEmailConfirmationEmailError(t *testing.T) {
+	assert := assert.New(t)
+	eventBus := mevent.NewMockEventBus(t)
+	eventBus.
+		EXPECT().
+		Subscribe(user_event.UserCreatedEventName, mock.Anything).
+		Return(nil).
+		Times(1)
+	userRepository := muser.NewMockUserRepository(t)
+	userRepository.
+		On("GetUserByID", mock.AnythingOfType("string")).
+		Return(func(id string) (user.User, error) {
+			password, err := bcrypt.GenerateFromPassword([]byte("somepassword"), bcrypt.DefaultCost)
+			if err != nil {
+				return user.User{}, err
+			}
+			u, err := user.NewUser(id, "somemail@mail.com", string(password))
+			return u, err
+		}).
+		Times(1)
+	emailService := email.NewMockEmailService(t)
+	emailService.
+		EXPECT().
+		SendEmail(mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("string")).
+		Return(errors.New("error sending email")).
+		Times(1)
+	notifyEmailConfirmationService := user.NewNotifyEmailConfirmationService(userRepository, emailService, eventBus, "cirrostratus-cloud@cloud.com", "https://example.com/confirm", util.FromStringToByteArray("somekey"), 3600)
+	err := notifyEmailConfirmationService.NotifyEmailConfirmation(user.NotifyEmailConfirmationRequest{
+		UserID: "someuserid",
+	})
+	assert.NotNil(err)
+}
+
+func TestConfirmateEmailOk(t *testing.T) {
+	assert := assert.New(t)
+	userRepository := muser.NewMockUserRepository(t)
+	userRepository.
+		On("GetUserByID", mock.AnythingOfType("string")).
+		Return(func(id string) (user.User, error) {
+			password, err := bcrypt.GenerateFromPassword([]byte("somepassword"), bcrypt.DefaultCost)
+			if err != nil {
+				return user.User{}, err
+			}
+			u, err := user.NewUser(id, "somemail@mail.com", string(password))
+			return u, err
+		}).
+		Times(1)
+	userRepository.
+		On("UpdateUser", mock.AnythingOfType("user.User")).
+		Return(func(u user.User) (user.User, error) {
+			return u, nil
+		}).
+		Times(1)
+	eventBus := mevent.NewMockEventBus(t)
+	eventBus.
+		EXPECT().
+		Publish(user_event.UserEmailConfirmedEventName, mock.Anything).
+		Return(nil).
+		Times(1)
+	token, err := util.GenerateTokenWithExpiration(time.Now().Add(time.Hour*24), map[string]interface{}{"user_id": "someid"}, util.FromStringToByteArray("somekey"))
+	assert.Nil(err)
+	confirmateEmailService := user.NewConfirmateEmailService(userRepository, eventBus, util.FromStringToByteArray("somekey"))
+	_, err = confirmateEmailService.ConfirmateEmail(user.ConfirmateEmailRequest{
+		ValidationToken: token,
+	})
+	assert.Nil(err)
+}
+
+func TestConfirmateEmailInvalidToken(t *testing.T) {
+	assert := assert.New(t)
+	userRepository := muser.NewMockUserRepository(t)
+	eventBus := mevent.NewMockEventBus(t)
+	confirmateEmailService := user.NewConfirmateEmailService(userRepository, eventBus, util.FromStringToByteArray("somekey"))
+	_, err := confirmateEmailService.ConfirmateEmail(user.ConfirmateEmailRequest{
+		ValidationToken: "invalidtoken",
+	})
+	assert.NotNil(err)
+}
+
+func TestConfirmateEmailUserNotFound(t *testing.T) {
+	assert := assert.New(t)
+	userRepository := muser.NewMockUserRepository(t)
+	userRepository.
+		On("GetUserByID", mock.AnythingOfType("string")).
+		Return(func(id string) (user.User, error) {
+			return user.User{}, errors.New("user not found")
+		}).
+		Times(1)
+	eventBus := mevent.NewMockEventBus(t)
+	token, err := util.GenerateTokenWithExpiration(time.Now().Add(time.Hour*24), map[string]interface{}{"user_id": "someid"}, util.FromStringToByteArray("somekey"))
+	assert.Nil(err)
+	confirmateEmailService := user.NewConfirmateEmailService(userRepository, eventBus, util.FromStringToByteArray("somekey"))
+	_, err = confirmateEmailService.ConfirmateEmail(user.ConfirmateEmailRequest{
+		ValidationToken: token,
 	})
 	assert.NotNil(err)
 }
